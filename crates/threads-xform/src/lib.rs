@@ -22,6 +22,7 @@ pub struct Config {
     maximum_memory: u32,
     thread_stack_size: u32,
     enabled: bool,
+    disabled: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -34,6 +35,7 @@ impl Config {
             maximum_memory: 1 << 30,    // 1GB
             thread_stack_size: 1 << 21, // 2MB
             enabled: env::var("WASM_BINDGEN_THREADS").is_ok(),
+            disabled: false,
         }
     }
 
@@ -41,6 +43,9 @@ impl Config {
     pub fn is_enabled(&self, module: &Module) -> bool {
         if self.enabled {
             return true;
+        }
+        if self.disabled {
+            return false;
         }
 
         // Compatibility with older LLVM outputs. Newer LLVM outputs, when
@@ -84,6 +89,12 @@ impl Config {
     /// and will be stored in LLVM's global stack pointer.
     pub fn thread_stack_size(&mut self, size: u32) -> &mut Config {
         self.thread_stack_size = size;
+        self
+    }
+
+    /// Diables the thread transform.
+    pub fn disable(&mut self) -> &mut Config {
+        self.disabled = true;
         self
     }
 

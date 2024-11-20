@@ -7,7 +7,7 @@ use std::fs;
 use std::mem;
 use std::path::{Path, PathBuf};
 use std::str;
-use walrus::Module;
+use walrus::{Import, Module};
 
 pub(crate) const PLACEHOLDER_MODULE: &str = "__wbindgen_placeholder__";
 
@@ -43,6 +43,7 @@ pub struct Bindgen {
     encode_into: EncodeInto,
     split_linked_modules: bool,
     symbol_dispose: bool,
+    wasi: bool,
 }
 
 pub struct Output {
@@ -112,6 +113,7 @@ impl Bindgen {
             omit_default_module_path: true,
             split_linked_modules: false,
             symbol_dispose,
+            wasi: false,
         }
     }
 
@@ -343,6 +345,13 @@ impl Bindgen {
             && module.exports.iter().any(|export| export.name == "default")
         {
             bail!("exported symbol \"default\" not allowed for --target web")
+        }
+
+        // Check if module is targeting WASI.
+        self.wasi = module.imports.iter().any(is_wasi_import);
+        if self.wasi {
+            log::debug!("WASI module detected");
+            self.threads.disable();
         }
 
         let thread_count = self
@@ -824,4 +833,9 @@ where
     let mut pairs = map.iter_mut().collect::<Vec<_>>();
     pairs.sort_by_key(|(k, _)| *k);
     pairs.into_iter()
+}
+
+/// Checks whether the import is from the WASI API.
+fn is_wasi_import(import: &Import) -> bool {
+    import.module == "wasi_snapshot_preview1" || import.module == "wasi"
 }

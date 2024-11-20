@@ -7,7 +7,9 @@ use crate::wit::{
 use crate::wit::{AdapterKind, Instruction, InstructionData};
 use crate::wit::{AuxEnum, AuxExport, AuxExportKind, AuxImport, AuxStruct};
 use crate::wit::{JsImport, JsImportName, NonstandardWitSection, WasmBindgenAux};
-use crate::{reset_indentation, Bindgen, EncodeInto, OutputMode, PLACEHOLDER_MODULE};
+use crate::{
+    is_wasi_import, reset_indentation, Bindgen, EncodeInto, OutputMode, PLACEHOLDER_MODULE,
+};
 use anyhow::{anyhow, bail, Context as _, Error};
 use binding::TsReference;
 use std::borrow::Cow;
@@ -78,6 +80,9 @@ pub struct Context<'a> {
 
     /// If threading is enabled.
     threads_enabled: bool,
+
+    /// Whether this is a WASI module.
+    wasi: bool,
 }
 
 #[derive(Default)]
@@ -153,6 +158,7 @@ impl<'a> Context<'a> {
             memories: Default::default(),
             table_indices: Default::default(),
             stack_pointer_shim_injected: false,
+            wasi: config.wasi,
         })
     }
 
@@ -760,7 +766,9 @@ __wbg_set_wasm(wasm);"
         let mut has_memory = false;
         if let Some(mem) = self.module.memories.iter().next() {
             if let Some(id) = mem.import {
-                self.module.imports.get_mut(id).module = module_name.to_string();
+                if !self.wasi {
+                    self.module.imports.get_mut(id).module = module_name.to_string();
+                }
                 init_memory = format!(
                     "imports.{}.memory = memory || new WebAssembly.Memory({{",
                     module_name
@@ -827,6 +835,7 @@ __wbg_set_wasm(wasm);"
             .module
             .imports
             .iter()
+            .filter(|i| !self.wasi || !is_wasi_import(i))
             .filter(|i| !self.wasm_import_definitions.contains_key(&i.id()))
             .filter(|i| {
                 // Importing memory is handled specially in this area, so don't
@@ -900,10 +909,16 @@ __wbg_set_wasm(wasm);"
                     }}
                 }}
 
-                function __wbg_get_imports() {{
+                {wasi_export} function __wbg_get_imports() {{
                     const imports = {{}};
                     {imports_init}
                     return imports;
+                }}
+
+                {wasi_export} function __wbg_set_exports(exports) {{
+                    wasm = exports;
+                    {init_memviews}
+                    {init_stack_size_check}
                 }}
 
                 function __wbg_init_memory(imports, memory) {{
@@ -1000,6 +1015,7 @@ __wbg_set_wasm(wasm);"
             } else {
                 String::new()
             },
+            wasi_export = if self.wasi {"export"} else {""},
         );
 
         Ok((js, ts))
