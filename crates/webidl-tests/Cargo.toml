@@ -21,6 +21,9 @@ wasm-bindgen-webidl = { path = "../webidl" }
 [dev-dependencies]
 wasm-bindgen-test = { path = '../test' }
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(web_sys_unstable_apis)'] }
+
 [[test]]
 name = 'wasm'
 path = 'main.rs'
