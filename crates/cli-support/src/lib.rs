@@ -826,6 +826,7 @@ where
 }
 
 /// Like `sorted_iter`, but produces mutable references to the values
+#[allow(dead_code)]
 fn sorted_iter_mut<K, V>(map: &mut HashMap<K, V>) -> impl Iterator<Item = (&K, &mut V)>
 where
     K: Ord,
