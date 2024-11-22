@@ -136,10 +136,15 @@ impl<'a> Context<'a> {
         wit: &'a NonstandardWitSection,
         aux: &'a WasmBindgenAux,
     ) -> Result<Context<'a>, Error> {
+        let mut typescript = "/* tslint:disable */\n/* eslint-disable */\n".to_string();
+        if config.wasi {
+            typescript.push_str("import * as __wwrr from \"./wwrr.js\";\n");
+        }
+
         Ok(Context {
             globals: String::new(),
             imports_post: String::new(),
-            typescript: "/* tslint:disable */\n/* eslint-disable */\n".to_string(),
+            typescript,
             exposed_globals: Some(Default::default()),
             imported_names: Default::default(),
             js_imports: Default::default(),
@@ -556,8 +561,12 @@ __wbg_set_wasm(wasm);"
             OutputMode::Web => {
                 self.imports_post.push_str("let wasm;\n");
                 init = self.gen_init(needs_manual_start, Some(&mut imports))?;
-                footer.push_str("export { initSync };\n");
-                footer.push_str("export default __wbg_init;");
+                if !self.wasi {
+                    footer.push_str("export { initSync };\n");
+                    footer.push_str("export default __wbg_init;");
+                } else {
+                    footer.push_str("export default __wbg_wasi_init;");
+                }
             }
         }
 
@@ -654,6 +663,10 @@ __wbg_set_wasm(wasm);"
             | OutputMode::Node { module: true }
             | OutputMode::Web
             | OutputMode::Deno => {
+                if self.wasi {
+                    imports.push_str(r#"import * as __wwrr from "./wwrr.js";"#);
+                }
+
                 for (module, items) in crate::sorted_iter(&self.js_imports) {
                     imports.push_str("import { ");
                     for (i, (item, rename)) in items.iter().enumerate() {
@@ -680,6 +693,16 @@ __wbg_set_wasm(wasm);"
         has_memory: bool,
         has_module_or_path_optional: bool,
     ) -> Result<String, Error> {
+        if self.wasi {
+            return Ok("\n\
+                /** Enables logging the runtime and sets the log level. */\n\
+                export function __initRuntimeLog(level: String);\n\
+                /** Initializes the WASI reactor module. */\n\
+                export default function __wbg_wasi_init(config?: __wwrr.RunOptions);\n\
+            "
+            .to_string());
+        }
+
         let output = crate::wasm2es6js::interface(self.module)?;
 
         let (memory_doc, memory_param) = if has_memory {
@@ -983,6 +1006,32 @@ __wbg_set_wasm(wasm);"
                     const {{ instance, module }} = await __wbg_load(await module_or_path, imports);
 
                     return __wbg_finalize_init(instance, module{init_stack_size_arg});
+                }}
+
+                let __runtimeLogFilter = \"\";
+
+                export function __setRuntimeLogFilter(filter) {{
+                    __runtimeLogFilter = filter;
+                }}
+
+                async function __wbg_wasi_init(config) {{
+                    if (wasm !== undefined) return wasm;
+
+                    await __wwrr.default();
+                    __wwrr.initializeLogger(__runtimeLogFilter);
+
+                    let module_or_path;
+                    {default_module_path}
+                    const moduleResponse = await fetch(module_or_path);
+                    const moduleData = new Uint8Array(await moduleResponse.arrayBuffer());
+
+                    const imports = __wbg_get_imports();
+                    const instance = await __wwrr.loadWasix(moduleData, config, imports, import.meta.url);
+                    __wbg_set_exports(instance.exports);
+
+                    wasm.__wbindgen_start();
+
+                    return instance;
                 }}
             ",
             init_memory_arg = init_memory_arg,
