@@ -695,8 +695,8 @@ __wbg_set_wasm(wasm);"
     ) -> Result<String, Error> {
         if self.wasi {
             return Ok("\n\
-                /** Enables logging the runtime and sets the log level. */\n\
-                export function __initRuntimeLog(level: String);\n\
+                /** Runtime log configuration. */\n\
+                export const __runtimeLogConfig: __wwrr.LogConfig;\n\
                 /** Initializes the WASI reactor module. */\n\
                 export default function __wbg_wasi_init(config?: __wwrr.RunOptions);\n\
             "
@@ -1008,17 +1008,13 @@ __wbg_set_wasm(wasm);"
                     return __wbg_finalize_init(instance, module{init_stack_size_arg});
                 }}
 
-                let __runtimeLogFilter = \"\";
-
-                export function __setRuntimeLogFilter(filter) {{
-                    __runtimeLogFilter = filter;
-                }}
+                export const __runtimeLogConfig = {{}};
 
                 async function __wbg_wasi_init(config) {{
                     if (wasm !== undefined) return wasm;
 
                     await __wwrr.default();
-                    __wwrr.initializeLogger(__runtimeLogFilter);
+                    __wwrr.initializeLogger(__runtimeLogConfig);
 
                     let module_or_path;
                     {default_module_path}
