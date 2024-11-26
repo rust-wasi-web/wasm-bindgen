@@ -110,6 +110,9 @@ members = [
 ]
 resolver = "2"
 
+[workspace.dependencies]
+walrus = "0.23"
+
 [patch.crates-io]
 js-sys = { path = 'crates/js-sys' }
 wasm-bindgen = { path = '.' }
