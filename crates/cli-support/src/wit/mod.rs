@@ -2,12 +2,12 @@ use crate::decode::LocalModule;
 use crate::descriptor::{Descriptor, Function};
 use crate::descriptors::WasmBindgenDescriptorsSection;
 use crate::intrinsic::Intrinsic;
-use crate::{decode, Bindgen, PLACEHOLDER_MODULE};
+use crate::{decode, Bindgen, INIT_EXTERNREF_TABLE_NAME, PLACEHOLDER_MODULE};
 use anyhow::{anyhow, bail, Error};
 use std::collections::{BTreeSet, HashMap};
 use std::str;
-use walrus::MemoryId;
 use walrus::{ExportId, FunctionId, ImportId, Module};
+use walrus::{FunctionBuilder, MemoryId};
 use wasm_bindgen_shared::struct_function_export_name;
 use wasm_bindgen_threads_xform::ThreadCount;
 
@@ -37,6 +37,7 @@ struct Context<'a> {
     thread_count: Option<ThreadCount>,
     support_start: bool,
     linked_modules: bool,
+    wasi: bool,
 }
 
 struct InstructionBuilder<'a, 'b> {
@@ -69,6 +70,7 @@ pub fn process(
         thread_count,
         support_start: bindgen.emit_start,
         linked_modules: bindgen.split_linked_modules,
+        wasi: bindgen.wasi,
     };
     cx.init()?;
 
@@ -318,7 +320,13 @@ impl<'a> Context<'a> {
             self.module
                 .add_import_func(PLACEHOLDER_MODULE, "__wbindgen_init_externref_table", ty);
 
-        if self.module.start.is_some() {
+        if self.wasi {
+            let mut builder = FunctionBuilder::new(&mut self.module.types, &[], &[]);
+            builder.name(INIT_EXTERNREF_TABLE_NAME.into());
+            builder.func_body().call(import);
+            let id = builder.finish(Vec::new(), &mut self.module.funcs);
+            self.module.exports.add(INIT_EXTERNREF_TABLE_NAME, id);
+        } else if self.module.start.is_some() {
             let builder = wasm_bindgen_wasm_conventions::get_or_insert_start_builder(self.module);
             builder.func_body().call_at(0, import);
         } else {

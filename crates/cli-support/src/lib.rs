@@ -10,6 +10,7 @@ use std::str;
 use walrus::{Import, Module};
 
 pub(crate) const PLACEHOLDER_MODULE: &str = "__wbindgen_placeholder__";
+pub(crate) const INIT_EXTERNREF_TABLE_NAME: &str = "__wbg_init_externref_table";
 
 mod decode;
 mod descriptor;

@@ -8,7 +8,8 @@ use crate::wit::{AdapterKind, Instruction, InstructionData};
 use crate::wit::{AuxEnum, AuxExport, AuxExportKind, AuxImport, AuxStruct};
 use crate::wit::{JsImport, JsImportName, NonstandardWitSection, WasmBindgenAux};
 use crate::{
-    is_wasi_import, reset_indentation, Bindgen, EncodeInto, OutputMode, PLACEHOLDER_MODULE,
+    is_wasi_import, reset_indentation, Bindgen, EncodeInto, OutputMode, INIT_EXTERNREF_TABLE_NAME,
+    PLACEHOLDER_MODULE,
 };
 use anyhow::{anyhow, bail, Context as _, Error};
 use binding::TsReference;
@@ -241,7 +242,7 @@ impl<'a> Context<'a> {
         // up we always remove the `start` function if one is present. The JS
         // bindings glue then manually calls the start function (if it was
         // previously present).
-        let needs_manual_start = self.unstart_start_function();
+        let needs_manual_start = !self.wasi && self.unstart_start_function();
 
         // Cause any future calls to `should_write_global` to panic, making sure
         // we don't ask for items which we can no longer emit.
@@ -1023,9 +1024,9 @@ __wbg_set_wasm(wasm);"
 
                     const imports = __wbg_get_imports();
                     const instance = await __wwrr.loadWasix(moduleData, config, imports, import.meta.url);
-                    __wbg_set_exports(instance.exports);
 
-                    wasm.__wbindgen_start();
+                    __wbg_set_exports(instance.exports);
+                    wasm.{INIT_EXTERNREF_TABLE_NAME}();
 
                     return instance;
                 }}
