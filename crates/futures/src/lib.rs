@@ -34,6 +34,7 @@
 #![deny(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+use cfg_if::cfg_if;
 use js_sys::Promise;
 use std::cell::RefCell;
 use std::fmt;
@@ -64,6 +65,15 @@ mod task {
             mod singlethread;
             pub(crate) use singlethread::*;
          }
+    }
+}
+
+cfg_if! {
+    if #[cfg(all(target_feature = "atomics", target_os = "wasi"))] {
+        pub mod thread;
+        mod sync_wrapper;
+        mod thread_spawn;
+        pub use thread_spawn::*;
     }
 }
 

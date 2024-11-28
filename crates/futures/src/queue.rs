@@ -57,7 +57,7 @@ pub(crate) struct Queue {
 }
 
 impl Queue {
-    // Schedule a task to run on the next tick
+    /// Schedule a task to run on the next tick
     pub(crate) fn schedule_task(&self, task: Rc<crate::task::Task>) {
         self.state.tasks.borrow_mut().push_back(task);
         // Use queueMicrotask to execute as soon as possible. If it does not exist
@@ -70,7 +70,9 @@ impl Queue {
             }
         }
     }
-    // Append a task to the currently running queue, or schedule it
+
+    /// Append a task to the currently running queue, or schedule it
+    #[allow(dead_code)]
     pub(crate) fn push_task(&self, task: Rc<crate::task::Task>) {
         // It would make sense to run this task on the same tick.  For now, we
         // make the simplifying choice of always scheduling tasks for a future tick.

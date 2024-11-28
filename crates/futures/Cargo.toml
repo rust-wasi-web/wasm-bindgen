@@ -22,6 +22,10 @@ futures-core = { version = '0.3.8', default-features = false, optional = true }
 js-sys = { path = "../js-sys", version = '0.3.72' }
 wasm-bindgen = { path = "../..", version = '0.2.95' }
 
+[target.'cfg(target_os = "wasi")'.dependencies]
+futures-channel = "0.3.31"
+futures-util = "0.3.31"
+
 [features]
 futures-core-03-stream = ['futures-core']
 
@@ -34,3 +38,8 @@ version = "0.3.24"
 futures-channel-preview = { version = "0.3.0-alpha.18" }
 futures-lite = { version = "1.11.3", default-features = false }
 wasm-bindgen-test = { path = '../test' }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(wasm_bindgen_unstable_test_coverage)',
+] }

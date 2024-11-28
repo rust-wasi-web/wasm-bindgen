@@ -29,4 +29,4 @@ wasm-bindgen-test = { path = '../test' }
 web-sys = { path = "../web-sys", features = ["Headers", "Response", "ResponseInit"] }
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(js_sys_unstable_apis)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(js_sys_unstable_apis)', 'cfg(wasm_bindgen_unstable_test_coverage)'] }
