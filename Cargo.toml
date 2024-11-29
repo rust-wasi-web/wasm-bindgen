@@ -111,11 +111,12 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
-walrus = "0.23"
+walrus = "0.23.1"
 
 [patch.crates-io]
 js-sys = { path = 'crates/js-sys' }
-walrus = { path = '../walrus' }
 wasm-bindgen = { path = '.' }
 wasm-bindgen-futures = { path = 'crates/futures' }
 web-sys = { path = 'crates/web-sys' }
+
+# walrus = { path = '../walrus' }
