@@ -60,7 +60,7 @@ impl fmt::Display for JoinError {
                 Some(msg) => write!(f, "task panicked with message {msg}"),
                 None => write!(f, "task panicked"),
             },
-            Repr::Failed => todo!(),
+            Repr::Failed => write!(f, "task failed"),
         }
     }
 }
