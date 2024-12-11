@@ -103,13 +103,16 @@ fn internal_error(msg: &str) -> ! {
         if #[cfg(debug_assertions)] {
             super::throw_str(msg)
         } else if #[cfg(feature = "std")] {
+            let _ = msg;
             std::process::abort();
         } else if #[cfg(all(
             target_arch = "wasm32",
             any(target_os = "unknown", target_os = "wasi")
         ))] {
+            let _ = msg;
             core::arch::wasm32::unreachable();
         } else {
+            let _ = msg;
             unreachable!()
         }
     }
