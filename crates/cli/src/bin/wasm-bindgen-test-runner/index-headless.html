@@ -35,7 +35,7 @@
      wrap("warn");
      wrap("error");
 
-     window.__wbg_test_invoke = f => f();
+     globalThis.__wbg_test_invoke = f => f();
     </script>
     <!-- {IMPORT_SCRIPTS} -->
   </body>

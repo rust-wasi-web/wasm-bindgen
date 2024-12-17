@@ -18,7 +18,7 @@ pub fn execute(
 
         {console_override}
 
-        window.__wbg_test_invoke = f => f();
+        globalThis.__wbg_test_invoke = f => f();
 
         // Forward runtime arguments. These arguments are also arguments to the
         // `wasm-bindgen-test-runner` which forwards them to deno which we
