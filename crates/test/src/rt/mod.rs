@@ -237,10 +237,12 @@ trait Formatter {
 extern "C" {
     #[wasm_bindgen(js_namespace = console, js_name = log)]
     #[doc(hidden)]
+    #[allow(unused_doc_comments)]
     pub fn js_console_log(s: &str);
 
     #[wasm_bindgen(js_namespace = console, js_name = error)]
     #[doc(hidden)]
+    #[allow(unused_doc_comments)]
     pub fn js_console_error(s: &str);
 
     // General-purpose conversion into a `String`.
