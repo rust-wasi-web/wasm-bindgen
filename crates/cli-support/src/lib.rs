@@ -36,9 +36,6 @@ pub struct Bindgen {
     remove_producers_section: bool,
     omit_default_module_path: bool,
     emit_start: bool,
-    // Support for the Wasm threads proposal, transforms the Wasm module to be
-    // "ready to be instantiated on any thread"
-    threads: wasm_bindgen_threads_xform::Config,
     externref: bool,
     multi_value: bool,
     encode_into: EncodeInto,
@@ -107,7 +104,6 @@ impl Bindgen {
             remove_name_section: false,
             remove_producers_section: false,
             emit_start: true,
-            threads: threads_config(),
             externref,
             multi_value,
             encode_into: EncodeInto::Test,
@@ -328,10 +324,7 @@ impl Bindgen {
         };
 
         // Enable reference type transformations if the module is already using it.
-        // Currently `webpack` does not support reference types.
-        if !matches!(self.mode, OutputMode::Bundler { .. })
-            && wasm_bindgen_wasm_conventions::target_feature(&module, "reference-types").ok()
-                == Some(true)
+        if let Ok(true) = wasm_bindgen_wasm_conventions::target_feature(&module, "reference-types")
         {
             self.externref = true;
         }
@@ -352,12 +345,9 @@ impl Bindgen {
         self.wasi = module.imports.iter().any(is_wasi_import);
         if self.wasi {
             log::debug!("WASI module detected");
-            self.threads.disable();
         }
 
-        let thread_count = self
-            .threads
-            .run(&mut module)
+        let thread_count = wasm_bindgen_threads_xform::run(&mut module)
             .with_context(|| "failed to prepare module for threading")?;
 
         // If requested, turn all mangled symbols into prettier unmangled
@@ -548,20 +538,6 @@ fn reset_indentation(s: &str) -> String {
     dst
 }
 
-// Eventually these will all be CLI options, but while they're unstable features
-// they're left as environment variables. We don't guarantee anything about
-// backwards-compatibility with these options.
-fn threads_config() -> wasm_bindgen_threads_xform::Config {
-    let mut cfg = wasm_bindgen_threads_xform::Config::new();
-    if let Ok(s) = env::var("WASM_BINDGEN_THREADS_MAX_MEMORY") {
-        cfg.maximum_memory(s.parse().unwrap());
-    }
-    if let Ok(s) = env::var("WASM_BINDGEN_THREADS_STACK_SIZE") {
-        cfg.thread_stack_size(s.parse().unwrap());
-    }
-    cfg
-}
-
 fn demangle(module: &mut Module) {
     for func in module.funcs.iter_mut() {
         let name = match &func.name {
@@ -591,10 +567,6 @@ impl OutputMode {
 
     fn no_modules(&self) -> bool {
         matches!(self, OutputMode::NoModules { .. })
-    }
-
-    fn web(&self) -> bool {
-        matches!(self, OutputMode::Web)
     }
 
     fn esm_integration(&self) -> bool {
@@ -822,17 +794,6 @@ where
     K: Ord,
 {
     let mut pairs = map.iter().collect::<Vec<_>>();
-    pairs.sort_by_key(|(k, _)| *k);
-    pairs.into_iter()
-}
-
-/// Like `sorted_iter`, but produces mutable references to the values
-#[allow(dead_code)]
-fn sorted_iter_mut<K, V>(map: &mut HashMap<K, V>) -> impl Iterator<Item = (&K, &mut V)>
-where
-    K: Ord,
-{
-    let mut pairs = map.iter_mut().collect::<Vec<_>>();
     pairs.sort_by_key(|(k, _)| *k);
     pairs.into_iter()
 }

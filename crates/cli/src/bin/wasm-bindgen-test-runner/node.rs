@@ -1,10 +1,11 @@
 use std::env;
-use std::ffi::OsString;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Error};
+
+use crate::Cli;
 
 // depends on the variable 'wasm' and initializes te WasmBindgenTestContext cx
 pub const SHARED_SETUP: &str = r#"
@@ -14,13 +15,17 @@ const wrap = method => {
     const og = console[method];
     const on_method = `on_console_${method}`;
     console[method] = function (...args) {
-        og.apply(this, args);
+        if (nocapture) {
+            og.apply(this, args);
+        }
         if (handlers[on_method]) {
             handlers[on_method](args);
         }
     };
 };
 
+// save original `console.log`
+global.__wbgtest_og_console_log = console.log;
 // override `console.log` and `console.error` etc... before we import tests to
 // ensure they're bound correctly in wasm. This'll allow us to intercept
 // all these calls and capture the output of tests
@@ -41,27 +46,31 @@ handlers.on_console_error = wasm.__wbgtest_console_error;
 pub fn execute(
     module: &str,
     tmpdir: &Path,
-    args: &[OsString],
+    cli: Cli,
     tests: &[String],
     module_format: bool,
+    coverage: PathBuf,
 ) -> Result<(), Error> {
     let mut js_to_execute = format!(
         r#"
         {exit};
+        {fs};
         {wasm};
 
+        const nocapture = {nocapture};
         {console_override}
 
         global.__wbg_test_invoke = f => f();
 
         async function main(tests) {{
-            // Forward runtime arguments. These arguments are also arguments to the
-            // `wasm-bindgen-test-runner` which forwards them to node which we
-            // forward to the test harness. this is basically only used for test
-            // filters for now.
-            cx.args(process.argv.slice(2));
+            {args}
 
             const ok = await cx.run(tests.map(n => wasm.__wasm[n]));
+
+            const coverage = wasm.__wbgtest_cov_dump();
+            if (coverage !== undefined)
+                await fs.writeFile('{coverage}', coverage);
+
             if (!ok)
                 exit(1);
         }}
@@ -78,7 +87,15 @@ pub fn execute(
         } else {
             r"import { exit } from 'node:process'".to_string()
         },
+        fs = if !module_format {
+            r"const fs = require('node:fs/promises')".to_string()
+        } else {
+            r"import fs from 'node:fs/promises'".to_string()
+        },
+        coverage = coverage.display(),
+        nocapture = cli.nocapture.clone(),
         console_override = SHARED_SETUP,
+        args = cli.into_args(),
     );
 
     // Note that we're collecting *JS objects* that represent the functions to
@@ -126,8 +143,7 @@ pub fn execute(
             .env("NODE_PATH", env::join_paths(&path).unwrap())
             .arg("--expose-gc")
             .args(&extra_node_args)
-            .arg(&js_path)
-            .args(args),
+            .arg(&js_path),
     )
 }
 

@@ -1,8 +1,8 @@
 use crate::descriptor::VectorKind;
 use crate::intrinsic::Intrinsic;
 use crate::wit::{
-    Adapter, AdapterId, AdapterJsImportKind, AdapterType, AuxExportedMethodKind, AuxReceiverKind,
-    AuxStringEnum, AuxValue,
+    Adapter, AdapterId, AdapterJsImportKind, AuxExportedMethodKind, AuxReceiverKind, AuxStringEnum,
+    AuxValue,
 };
 use crate::wit::{AdapterKind, Instruction, InstructionData};
 use crate::wit::{AuxEnum, AuxExport, AuxExportKind, AuxImport, AuxStruct};
@@ -13,6 +13,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context as _, Error};
 use binding::TsReference;
+use identifier::is_valid_ident;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt;
@@ -22,6 +23,7 @@ use std::path::{Path, PathBuf};
 use walrus::{FunctionId, ImportId, MemoryId, Module, TableId, ValType};
 
 mod binding;
+pub mod identifier;
 
 pub struct Context<'a> {
     globals: String,
@@ -126,6 +128,18 @@ struct FieldAccessor {
     is_optional: bool,
 }
 
+/// Different JS constructs that can be exported.
+enum ExportJs<'a> {
+    /// A class of the form `class Name {...}`.
+    Class(&'a str),
+    /// An anonymous function expression of the form `function(...) {...}`.
+    ///
+    /// Note that the function name is not included in the string.
+    Function(&'a str),
+    /// An arbitrary JS expression.
+    Expression(&'a str),
+}
+
 const INITIAL_HEAP_VALUES: &[&str] = &["undefined", "null", "true", "false"];
 // Must be kept in sync with `src/lib.rs` of the `wasm-bindgen` crate
 const INITIAL_HEAP_OFFSET: usize = 128;
@@ -155,7 +169,7 @@ impl<'a> Context<'a> {
             used_string_enums: Default::default(),
             exported_classes: Some(Default::default()),
             config,
-            threads_enabled: config.threads.is_enabled(module),
+            threads_enabled: wasm_bindgen_threads_xform::is_enabled(module),
             module,
             npm_dependencies: Default::default(),
             next_export_idx: 0,
@@ -175,38 +189,46 @@ impl<'a> Context<'a> {
     fn export(
         &mut self,
         export_name: &str,
-        contents: &str,
+        export: ExportJs,
         comments: Option<&str>,
     ) -> Result<(), Error> {
         let definition_name = self.generate_identifier(export_name);
-        if contents.starts_with("class") && definition_name != export_name {
+        if matches!(export, ExportJs::Class(_)) && definition_name != export_name {
             bail!("cannot shadow already defined class `{}`", export_name);
         }
 
-        let contents = contents.trim();
+        // write out comments
         if let Some(c) = comments {
             self.globals.push_str(c);
         }
+
         let global = match self.config.mode {
-            OutputMode::Node { module: false } => {
-                if contents.starts_with("class") {
-                    format!("{}\nmodule.exports.{1} = {1};\n", contents, export_name)
-                } else {
-                    format!("module.exports.{} = {};\n", export_name, contents)
+            OutputMode::Node { module: false } => match export {
+                ExportJs::Class(class) => {
+                    format!("{}\nmodule.exports.{1} = {1};\n", class, export_name)
                 }
-            }
-            OutputMode::NoModules { .. } => {
-                if contents.starts_with("class") {
-                    format!("{}\n__exports.{1} = {1};\n", contents, export_name)
-                } else {
-                    format!("__exports.{} = {};\n", export_name, contents)
+                ExportJs::Function(expr) | ExportJs::Expression(expr) => {
+                    format!("module.exports.{} = {};\n", export_name, expr)
                 }
-            }
+            },
+            OutputMode::NoModules { .. } => match export {
+                ExportJs::Class(class) => {
+                    format!("{}\n__exports.{1} = {1};\n", class, export_name)
+                }
+                ExportJs::Function(expr) | ExportJs::Expression(expr) => {
+                    format!("__exports.{} = {};\n", export_name, expr)
+                }
+            },
             OutputMode::Bundler { .. }
             | OutputMode::Node { module: true }
             | OutputMode::Web
-            | OutputMode::Deno => {
-                if let Some(body) = contents.strip_prefix("function") {
+            | OutputMode::Deno => match export {
+                ExportJs::Class(class) => {
+                    assert_eq!(export_name, definition_name);
+                    format!("export {}\n", class)
+                }
+                ExportJs::Function(function) => {
+                    let body = function.strip_prefix("function").unwrap();
                     if export_name == definition_name {
                         format!("export function {}{}\n", export_name, body)
                     } else {
@@ -215,14 +237,12 @@ impl<'a> Context<'a> {
                             definition_name, body, definition_name, export_name,
                         )
                     }
-                } else if contents.starts_with("class") {
-                    assert_eq!(export_name, definition_name);
-                    format!("export {}\n", contents)
-                } else {
-                    assert_eq!(export_name, definition_name);
-                    format!("export const {} = {};\n", export_name, contents)
                 }
-            }
+                ExportJs::Expression(expr) => {
+                    assert_eq!(export_name, definition_name);
+                    format!("export const {} = {};\n", export_name, expr)
+                }
+            },
         };
         self.global(&global);
         Ok(())
@@ -253,7 +273,12 @@ impl<'a> Context<'a> {
 
     fn generate_node_imports(&self) -> String {
         let mut imports = BTreeSet::new();
-        for import in self.module.imports.iter() {
+        for import in self
+            .module
+            .imports
+            .iter()
+            .filter(|i| !(matches!(i.kind, walrus::ImportKind::Memory(_))))
+        {
             imports.insert(&import.module);
         }
 
@@ -288,8 +313,26 @@ impl<'a> Context<'a> {
         reset_indentation(&shim)
     }
 
-    fn generate_node_wasm_loading(&self, path: &Path) -> String {
+    fn generate_node_wasm_loading(&mut self, path: &Path) -> String {
         let mut shim = String::new();
+
+        let module_name = "wbg";
+        if let Some(mem) = self.module.memories.iter().next() {
+            if let Some(id) = mem.import {
+                self.module.imports.get_mut(id).module = module_name.to_string();
+                shim.push_str(&format!(
+                    "imports.{module_name} = {{ memory: new WebAssembly.Memory({{"
+                ));
+                shim.push_str(&format!("initial:{}", mem.initial));
+                if let Some(max) = mem.maximum {
+                    shim.push_str(&format!(",maximum:{}", max));
+                }
+                if mem.shared {
+                    shim.push_str(",shared:true");
+                }
+                shim.push_str("}) };");
+            }
+        }
 
         if self.config.mode.uses_es_modules() {
             // On windows skip the leading `/` which comes out when we parse a
@@ -512,26 +555,17 @@ impl<'a> Context<'a> {
                     }
                 }
 
-                self.imports_post.push_str(
-                    "\
-                    let wasm;
-                    export function __wbg_set_wasm(val) {
-                        wasm = val;
-                    }
-                    ",
-                );
-
-                if matches!(self.config.mode, OutputMode::Node { module: true }) {
-                    let start = start.get_or_insert_with(String::new);
-                    start.push_str(&self.generate_node_imports());
-                    start.push_str(&self.generate_node_wasm_loading(Path::new(&format!(
-                        "./{}_bg.wasm",
-                        module_name
-                    ))));
-                }
-
                 match self.config.mode {
                     OutputMode::Bundler { .. } => {
+                        self.imports_post.push_str(
+                            "\
+                            let wasm;
+                            export function __wbg_set_wasm(val) {
+                                wasm = val;
+                            }
+                            ",
+                        );
+
                         start.get_or_insert_with(String::new).push_str(&format!(
                             "\
 import {{ __wbg_set_wasm }} from \"./{module_name}_bg.js\";
@@ -540,8 +574,26 @@ __wbg_set_wasm(wasm);"
                     }
 
                     OutputMode::Node { module: true } => {
-                        start.get_or_insert_with(String::new).push_str(&format!(
-                            "imports[\"./{module_name}_bg.js\"].__wbg_set_wasm(wasm);"
+                        self.imports_post.push_str(
+                            "\
+                            let wasm;
+                            let wasmModule;
+                            export function __wbg_set_wasm(exports, module) {
+                                wasm = exports;
+                                wasmModule = module;
+                            }
+                            ",
+                        );
+
+                        let start = start.get_or_insert_with(String::new);
+                        start.push_str(&self.generate_node_imports());
+                        start.push_str(&self.generate_node_wasm_loading(Path::new(&format!(
+                            "./{}_bg.wasm",
+                            module_name
+                        ))));
+
+                        start.push_str(&format!(
+                            "imports[\"./{module_name}_bg.js\"].__wbg_set_wasm(wasm, wasmModule);"
                         ));
                     }
 
@@ -1078,14 +1130,19 @@ __wbg_set_wasm(wasm);"
         let mut dst = format!("class {} {{\n", name);
         let mut ts_dst = format!("export {}", dst);
 
-        if self.config.debug && !class.has_constructor {
-            dst.push_str(
-                "
-                    constructor() {
-                        throw new Error('cannot invoke `new` directly');
-                    }
-                ",
-            );
+        if !class.has_constructor {
+            // declare the constructor as private to prevent direct instantiation
+            ts_dst.push_str("  private constructor();\n");
+
+            if self.config.debug {
+                dst.push_str(
+                    "
+                        constructor() {
+                            throw new Error('cannot invoke `new` directly');
+                        }
+                    ",
+                );
+            }
         }
 
         if class.wrap_needed {
@@ -1214,10 +1271,10 @@ __wbg_set_wasm(wasm);"
 
         self.write_class_field_types(class, &mut ts_dst);
 
-        dst.push_str("}\n");
+        dst.push('}');
         ts_dst.push_str("}\n");
 
-        self.export(name, &dst, Some(&class.comments))?;
+        self.export(name, ExportJs::Class(&dst), Some(&class.comments))?;
 
         if class.generate_typescript {
             self.typescript.push_str(&class.comments);
@@ -1646,26 +1703,25 @@ __wbg_set_wasm(wasm);"
                 let add = self.expose_add_to_externref_table(table, alloc)?;
                 self.global(&format!(
                     "
-                        function {}(array, malloc) {{
+                        function {ret}(array, malloc) {{
                             const ptr = malloc(array.length * 4, 4) >>> 0;
-                            const mem = {}();
                             for (let i = 0; i < array.length; i++) {{
-                                mem.setUint32(ptr + 4 * i, {}(array[i]), true);
+                                const add = {add}(array[i]);
+                                {mem}().setUint32(ptr + 4 * i, add, true);
                             }}
                             WASM_VECTOR_LEN = array.length;
                             return ptr;
                         }}
                     ",
-                    ret, mem, add,
                 ));
             }
             _ => {
                 self.expose_add_heap_object();
                 self.global(&format!(
                     "
-                        function {}(array, malloc) {{
+                        function {ret}(array, malloc) {{
                             const ptr = malloc(array.length * 4, 4) >>> 0;
-                            const mem = {}();
+                            const mem = {mem}();
                             for (let i = 0; i < array.length; i++) {{
                                 mem.setUint32(ptr + 4 * i, addHeapObject(array[i]), true);
                             }}
@@ -1673,7 +1729,6 @@ __wbg_set_wasm(wasm);"
                             return ptr;
                         }}
                     ",
-                    ret, mem,
                 ));
             }
         }
@@ -2623,6 +2678,30 @@ __wbg_set_wasm(wasm);"
         Ok(name)
     }
 
+    fn import_static(&mut self, import: &JsImport, optional: bool) -> Result<String, Error> {
+        let mut name = self.import_name(&JsImport {
+            name: import.name.clone(),
+            fields: Vec::new(),
+        })?;
+
+        // After we've got an actual name handle field projections
+        if optional {
+            name = format!("typeof {name} === 'undefined' ? null : {name}");
+
+            for field in import.fields.iter() {
+                name.push_str("?.");
+                name.push_str(field);
+            }
+        } else {
+            for field in import.fields.iter() {
+                name.push('.');
+                name.push_str(field);
+            }
+        }
+
+        Ok(name)
+    }
+
     /// If a start function is present, it removes it from the `start` section
     /// of the Wasm module and then moves it to an exported function, named
     /// `__wbindgen_start`.
@@ -2775,7 +2854,7 @@ __wbg_set_wasm(wasm);"
                 | AuxImport::Value(AuxValue::Setter(js, ..))
                 | AuxImport::ValueWithThis(js, ..)
                 | AuxImport::Instanceof(js)
-                | AuxImport::Static(js)
+                | AuxImport::Static { js, .. }
                 | AuxImport::StructuralClassGetter(js, ..)
                 | AuxImport::StructuralClassSetter(js, ..)
                 | AuxImport::IndexingGetterOfClass(js)
@@ -2893,7 +2972,11 @@ __wbg_set_wasm(wasm);"
                             self.typescript.push_str(";\n");
                         }
 
-                        self.export(name, &format!("function{}", code), Some(&js_docs))?;
+                        self.export(
+                            name,
+                            ExportJs::Function(&format!("function{}", code)),
+                            Some(&js_docs),
+                        )?;
                         self.globals.push('\n');
                     }
                     AuxExportKind::Constructor(class) => {
@@ -3124,6 +3207,21 @@ __wbg_set_wasm(wasm);"
             }
         }
 
+        if let JsImportName::Global { .. } | JsImportName::VendorPrefixed { .. } = js.name {
+            // We generally cannot import globals directly, because users can
+            // change most globals at runtime.
+            //
+            // An obvious example of this when the object literally changes
+            // (e.g. binding `foo.bar`), but polyfills can also change the
+            // object or fundtion.
+            //
+            // Late binding is another issue. The function might not even be
+            // defined when the Wasm module is instantiated. In such cases,
+            // there is an observable difference between a direct import and a
+            // JS shim calling the function.
+            return Ok(false);
+        }
+
         self.expose_not_defined();
         let name = self.import_name(js)?;
         let js = format!(
@@ -3161,16 +3259,14 @@ __wbg_set_wasm(wasm);"
 
                 // Conversions to Wasm integers are always supported since
                 // they're coerced into i32/f32/f64 appropriately.
-                IntToWasm { .. } => {}
+                Int32ToWasm => {}
+                Int64ToWasm => {}
 
-                // Converts from Wasm to JS, however, only supports most
-                // integers. Converting into a u32 isn't supported because we
+                // Converting into a u32 isn't supported because we
                 // need to generate glue to change the sign.
-                WasmToInt {
-                    output: AdapterType::U32,
-                    ..
-                } => return false,
-                WasmToInt { .. } => {}
+                WasmToInt32 { unsigned_32: false } => {}
+                // A Wasm `i64` is already a signed JS BigInt, so no glue needed.
+                WasmToInt64 { unsigned: false } => {}
 
                 // JS spec automatically coerces boolean values to i32 of 0 or 1
                 // depending on true/false
@@ -3297,11 +3393,11 @@ __wbg_set_wasm(wasm);"
                 Ok("result".to_owned())
             }
 
-            AuxImport::Static(js) => {
+            AuxImport::Static { js, optional } => {
                 assert!(kind == AdapterJsImportKind::Normal);
                 assert!(!variadic);
                 assert_eq!(args.len(), 0);
-                self.import_name(js)
+                self.import_static(js, *optional)
             }
 
             AuxImport::String(string) => {
@@ -3321,7 +3417,6 @@ __wbg_set_wasm(wasm);"
                 dtor,
                 mutable,
                 adapter,
-                nargs: _,
             } => {
                 assert!(kind == AdapterJsImportKind::Normal);
                 assert!(!variadic);
@@ -3818,13 +3913,18 @@ __wbg_set_wasm(wasm);"
 
             Intrinsic::Module => {
                 assert_eq!(args.len(), 0);
-                if !self.config.mode.no_modules() && !self.config.mode.web() {
-                    bail!(
+
+                match self.config.mode {
+                    OutputMode::Web | OutputMode::NoModules { .. } => {
+                        "__wbg_init.__wbindgen_wasm_module"
+                    }
+                    OutputMode::Node { .. } => "wasmModule",
+                    _ => bail!(
                         "`wasm_bindgen::module` is currently only supported with \
-                         `--target no-modules` and `--target web`"
-                    );
+                         `--target no-modules`, `--target web` and `--target nodejs`"
+                    ),
                 }
-                "__wbg_init.__wbindgen_wasm_module".to_string()
+                .to_string()
             }
 
             Intrinsic::Exports => {
@@ -4004,7 +4104,7 @@ __wbg_set_wasm(wasm);"
 
         self.export(
             &enum_.name,
-            &format!("Object.freeze({{\n{}}})", variants),
+            ExportJs::Expression(&format!("Object.freeze({{\n{}}})", variants)),
             Some(&docs),
         )?;
 
@@ -4520,48 +4620,6 @@ fn require_class<'a>(
         .expect("classes already written")
         .entry(name.to_string())
         .or_default()
-}
-
-/// Returns whether a character has the Unicode `ID_Start` properly.
-///
-/// This is only ever-so-slightly different from `XID_Start` in a few edge
-/// cases, so we handle those edge cases manually and delegate everything else
-/// to `unicode-ident`.
-fn is_id_start(c: char) -> bool {
-    match c {
-        '\u{037A}' | '\u{0E33}' | '\u{0EB3}' | '\u{309B}' | '\u{309C}' | '\u{FC5E}'
-        | '\u{FC5F}' | '\u{FC60}' | '\u{FC61}' | '\u{FC62}' | '\u{FC63}' | '\u{FDFA}'
-        | '\u{FDFB}' | '\u{FE70}' | '\u{FE72}' | '\u{FE74}' | '\u{FE76}' | '\u{FE78}'
-        | '\u{FE7A}' | '\u{FE7C}' | '\u{FE7E}' | '\u{FF9E}' | '\u{FF9F}' => true,
-        _ => unicode_ident::is_xid_start(c),
-    }
-}
-
-/// Returns whether a character has the Unicode `ID_Continue` properly.
-///
-/// This is only ever-so-slightly different from `XID_Continue` in a few edge
-/// cases, so we handle those edge cases manually and delegate everything else
-/// to `unicode-ident`.
-fn is_id_continue(c: char) -> bool {
-    match c {
-        '\u{037A}' | '\u{309B}' | '\u{309C}' | '\u{FC5E}' | '\u{FC5F}' | '\u{FC60}'
-        | '\u{FC61}' | '\u{FC62}' | '\u{FC63}' | '\u{FDFA}' | '\u{FDFB}' | '\u{FE70}'
-        | '\u{FE72}' | '\u{FE74}' | '\u{FE76}' | '\u{FE78}' | '\u{FE7A}' | '\u{FE7C}'
-        | '\u{FE7E}' => true,
-        _ => unicode_ident::is_xid_continue(c),
-    }
-}
-
-/// Returns whether a string is a valid JavaScript identifier.
-/// Defined at https://tc39.es/ecma262/#prod-IdentifierName.
-fn is_valid_ident(name: &str) -> bool {
-    name.chars().enumerate().all(|(i, char)| {
-        if i == 0 {
-            is_id_start(char) || char == '$' || char == '_'
-        } else {
-            is_id_continue(char) || char == '$' || char == '\u{200C}' || char == '\u{200D}'
-        }
-    })
 }
 
 /// Returns a string to tack on to the end of an expression to access a

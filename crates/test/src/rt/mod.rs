@@ -87,14 +87,19 @@
 // Overall this is all somewhat in flux as it's pretty new, and feedback is
 // always of course welcome!
 
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
+use alloc::format;
+use alloc::rc::Rc;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use core::cell::{Cell, RefCell};
+use core::fmt::{self, Display};
+use core::future::Future;
+use core::pin::Pin;
+use core::task::{self, Poll};
 use js_sys::{Array, Function, Promise};
-use std::cell::{Cell, RefCell};
-use std::fmt::{self, Display};
-use std::future::Future;
-use std::pin::Pin;
-use std::rc::Rc;
-use std::sync::Once;
-use std::task::{self, Poll};
+pub use wasm_bindgen;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
@@ -109,6 +114,7 @@ const CONCURRENCY: usize = 1;
 pub mod browser;
 pub mod detect;
 pub mod node;
+mod scoped_tls;
 pub mod worker;
 
 /// Runtime test harness support instantiated in JS.
@@ -130,17 +136,23 @@ struct State {
     /// Include ignored tests.
     include_ignored: Cell<bool>,
 
+    /// Include ignored tests.
+    ignored: Cell<bool>,
+
+    /// Only execute with exactly matching name.
+    exact: Cell<bool>,
+
     /// Tests to skip.
     skip: RefCell<Vec<String>>,
 
     /// Counter of the number of tests that have succeeded.
-    succeeded: Cell<usize>,
+    succeeded_count: Cell<usize>,
 
     /// Counter of the number of tests that have been filtered
-    filtered: Cell<usize>,
+    filtered_count: Cell<usize>,
 
     /// Counter of the number of tests that have been ignored
-    ignored: Cell<usize>,
+    ignored_count: Cell<usize>,
 
     /// A list of all tests which have failed.
     ///
@@ -159,6 +171,9 @@ struct State {
     /// How to actually format output, either node.js or browser-specific
     /// implementation.
     formatter: Box<dyn Formatter>,
+
+    /// Timing the total duration.
+    timer: Option<Timer>,
 }
 
 /// Failure reasons.
@@ -248,6 +263,18 @@ extern "C" {
     // General-purpose conversion into a `String`.
     #[wasm_bindgen(js_name = String)]
     fn stringify(val: &JsValue) -> String;
+
+    type Global;
+
+    #[wasm_bindgen(method, getter)]
+    fn performance(this: &Global) -> JsValue;
+
+    /// Type for the [`Performance` object](https://developer.mozilla.org/en-US/docs/Web/API/Performance).
+    type Performance;
+
+    /// Binding to [`Performance.now()`](https://developer.mozilla.org/en-US/docs/Web/API/Performance/now).
+    #[wasm_bindgen(method)]
+    fn now(this: &Performance) -> f64;
 }
 
 /// Internal implementation detail of the `console_log!` macro.
@@ -269,20 +296,54 @@ impl Context {
     /// tests.
     #[wasm_bindgen(constructor)]
     pub fn new() -> Context {
-        static SET_HOOK: Once = Once::new();
+        fn panic_handling(mut message: String) {
+            let should_panic = CURRENT_OUTPUT.with(|output| {
+                let mut output = output.borrow_mut();
+                output.panic.push_str(&message);
+                output.should_panic
+            });
+
+            // See https://github.com/rustwasm/console_error_panic_hook/blob/4dc30a5448ed3ffcfb961b1ad54d000cca881b84/src/lib.rs#L83-L123.
+            if !should_panic {
+                #[wasm_bindgen]
+                extern "C" {
+                    type Error;
+
+                    #[wasm_bindgen(constructor)]
+                    fn new() -> Error;
+
+                    #[wasm_bindgen(method, getter)]
+                    fn stack(error: &Error) -> String;
+                }
+
+                message.push_str("\n\nStack:\n\n");
+                let e = Error::new();
+                let stack = e.stack();
+                message.push_str(&stack);
+
+                message.push_str("\n\n");
+
+                js_console_error(&message);
+            }
+        }
+        #[cfg(feature = "std")]
+        static SET_HOOK: std::sync::Once = std::sync::Once::new();
+        #[cfg(feature = "std")]
         SET_HOOK.call_once(|| {
             std::panic::set_hook(Box::new(|panic_info| {
-                let should_panic = CURRENT_OUTPUT.with(|output| {
-                    let mut output = output.borrow_mut();
-                    output.panic.push_str(&panic_info.to_string());
-                    output.should_panic
-                });
-
-                if !should_panic {
-                    console_error_panic_hook::hook(panic_info);
-                }
+                panic_handling(panic_info.to_string());
             }));
         });
+        #[cfg(all(
+            not(feature = "std"),
+            target_arch = "wasm32",
+            any(target_os = "unknown", target_os = "none", target_os = "wasi")
+        ))]
+        #[panic_handler]
+        fn panic_handler(panic_info: &core::panic::PanicInfo<'_>) -> ! {
+            panic_handling(panic_info.to_string());
+            core::arch::wasm32::unreachable();
+        }
 
         let formatter = match detect::detect() {
             detect::Runtime::Browser => Box::new(browser::Browser::new()) as Box<dyn Formatter>,
@@ -290,51 +351,50 @@ impl Context {
             detect::Runtime::Worker => Box::new(worker::Worker::new()) as Box<dyn Formatter>,
         };
 
+        let timer = Timer::new();
+
         Context {
             state: Rc::new(State {
                 filter: Default::default(),
                 include_ignored: Default::default(),
+                ignored: Default::default(),
+                exact: Default::default(),
                 skip: Default::default(),
                 failures: Default::default(),
-                filtered: Default::default(),
-                ignored: Default::default(),
+                filtered_count: Default::default(),
+                ignored_count: Default::default(),
                 remaining: Default::default(),
                 running: Default::default(),
-                succeeded: Default::default(),
+                succeeded_count: Default::default(),
                 formatter,
+                timer,
             }),
         }
     }
 
-    /// Inform this context about runtime arguments passed to the test
-    /// harness.
-    pub fn args(&mut self, args: Vec<JsValue>) {
-        let mut filter = self.state.filter.borrow_mut();
-        let mut skip = self.state.skip.borrow_mut();
+    /// Handle `--include-ignored` flag.
+    pub fn include_ignored(&mut self, include_ignored: bool) {
+        self.state.include_ignored.set(include_ignored);
+    }
 
-        let mut args = args.into_iter();
+    /// Handle `--ignored` flag.
+    pub fn ignored(&mut self, ignored: bool) {
+        self.state.ignored.set(ignored);
+    }
 
-        while let Some(arg) = args.next() {
-            let arg = arg.as_string().unwrap();
-            if arg == "--include-ignored" {
-                self.state.include_ignored.set(true);
-            } else if arg == "--skip" {
-                skip.push(
-                    args.next()
-                        .expect("Argument to option 'skip' missing")
-                        .as_string()
-                        .unwrap(),
-                );
-            } else if let Some(arg) = arg.strip_prefix("--skip=") {
-                skip.push(arg.to_owned())
-            } else if arg.starts_with('-') {
-                panic!("flag {} not supported", arg);
-            } else if filter.is_some() {
-                panic!("more than one filter argument cannot be passed");
-            } else {
-                *filter = Some(arg);
-            }
-        }
+    /// Handle `--exact` flag.
+    pub fn exact(&mut self, exact: bool) {
+        self.state.exact.set(exact);
+    }
+
+    /// Handle `--skip` arguments.
+    pub fn skip(&mut self, skip: Vec<String>) {
+        *self.state.skip.borrow_mut() = skip;
+    }
+
+    /// Handle filter argument.
+    pub fn filter(&mut self, filter: Option<String>) {
+        *self.state.filter.borrow_mut() = filter;
     }
 
     /// Executes a list of tests, returning a promise representing their
@@ -351,7 +411,6 @@ impl Context {
         self.state
             .formatter
             .writeln(&format!("running {} {}", tests.len(), noun));
-        self.state.formatter.writeln("");
 
         // Execute all our test functions through their Wasm shims (unclear how
         // to pass native function pointers around here). Each test will
@@ -381,7 +440,7 @@ impl Context {
     }
 }
 
-scoped_tls::scoped_thread_local!(static CURRENT_OUTPUT: RefCell<Output>);
+crate::scoped_thread_local!(static CURRENT_OUTPUT: RefCell<Output>);
 
 /// Handler for `console.log` invocations.
 ///
@@ -454,7 +513,7 @@ impl Termination for () {
     }
 }
 
-impl<E: std::fmt::Debug> Termination for Result<(), E> {
+impl<E: core::fmt::Debug> Termination for Result<(), E> {
     fn into_js_result(self) -> Result<(), JsValue> {
         self.map_err(|e| JsError::new(&format!("{:?}", e)).into())
     }
@@ -501,32 +560,48 @@ impl Context {
         should_panic: Option<Option<&'static str>>,
         ignore: Option<Option<&'static str>>,
     ) {
+        // Split away
+        let name = name.split_once("::").unwrap().1;
         // If our test is filtered out, record that it was filtered and move
         // on, nothing to do here.
         let filter = self.state.filter.borrow();
         if let Some(filter) = &*filter {
-            if !name.contains(filter) {
-                let filtered = self.state.filtered.get();
-                self.state.filtered.set(filtered + 1);
+            let exact = self.state.exact.get();
+
+            let matches = if exact {
+                name == filter
+            } else {
+                name.contains(filter)
+            };
+
+            if !matches {
+                let filtered = self.state.filtered_count.get();
+                self.state.filtered_count.set(filtered + 1);
                 return;
             }
         }
 
         for skip in &*self.state.skip.borrow() {
             if name.contains(skip) {
-                let filtered = self.state.filtered.get();
-                self.state.filtered.set(filtered + 1);
+                let filtered = self.state.filtered_count.get();
+                self.state.filtered_count.set(filtered + 1);
                 return;
             }
         }
 
-        if !self.state.include_ignored.get() {
+        if self.state.ignored.get() && ignore.is_none() {
+            let filtered = self.state.filtered_count.get();
+            self.state.filtered_count.set(filtered + 1);
+            return;
+        }
+
+        if !self.state.include_ignored.get() && !self.state.ignored.get() {
             if let Some(ignore) = ignore {
                 self.state
                     .formatter
                     .log_test(name, &TestResult::Ignored(ignore.map(str::to_owned)));
-                let ignored = self.state.ignored.get();
-                self.state.ignored.set(ignored + 1);
+                let ignored = self.state.ignored_count.get();
+                self.state.ignored_count.set(ignored + 1);
                 return;
             }
         }
@@ -624,7 +699,7 @@ impl State {
                 }
 
                 self.formatter.log_test(&test.name, &TestResult::Ok);
-                self.succeeded.set(self.succeeded.get() + 1);
+                self.succeeded_count.set(self.succeeded_count.get() + 1);
             } else {
                 self.formatter
                     .log_test(&test.name, &TestResult::Err(JsValue::NULL));
@@ -636,7 +711,7 @@ impl State {
             self.formatter.log_test(&test.name, &result);
 
             match result {
-                TestResult::Ok => self.succeeded.set(self.succeeded.get() + 1),
+                TestResult::Ok => self.succeeded_count.set(self.succeeded_count.get() + 1),
                 TestResult::Err(e) => self.failures.borrow_mut().push((test, Failure::Error(e))),
                 _ => (),
             }
@@ -655,18 +730,25 @@ impl State {
                 self.formatter.writeln(&format!("    {}", test.name));
             }
         }
+        let finished_in = if let Some(timer) = &self.timer {
+            format!("; finished in {:.2?}s", timer.elapsed())
+        } else {
+            String::new()
+        };
         self.formatter.writeln("");
         self.formatter.writeln(&format!(
             "test result: {}. \
              {} passed; \
              {} failed; \
              {} ignored; \
-             {} filtered out\n",
+             {} filtered out\
+             {}\n",
             if failures.len() == 0 { "ok" } else { "FAILED" },
-            self.succeeded.get(),
+            self.succeeded_count.get(),
             failures.len(),
-            self.ignored.get(),
-            self.filtered.get(),
+            self.ignored_count.get(),
+            self.filtered_count.get(),
+            finished_in,
         ));
     }
 
@@ -790,4 +872,28 @@ fn tab(s: &str) -> String {
         result.push('\n');
     }
     result
+}
+
+struct Timer {
+    performance: Performance,
+    started: f64,
+}
+
+impl Timer {
+    fn new() -> Option<Self> {
+        let global: Global = js_sys::global().unchecked_into();
+        let performance = global.performance();
+        (!performance.is_undefined()).then(|| {
+            let performance: Performance = performance.unchecked_into();
+            let started = performance.now();
+            Self {
+                performance,
+                started,
+            }
+        })
+    }
+
+    fn elapsed(&self) -> f64 {
+        (self.performance.now() - self.started) / 1000.
+    }
 }
