@@ -25,7 +25,7 @@ const wrap = method => {
 };
 
 // save original `console.log`
-global.__wbgtest_og_console_log = console.log;
+globalThis.__wbgtest_og_console_log = console.log;
 // override `console.log` and `console.error` etc... before we import tests to
 // ensure they're bound correctly in wasm. This'll allow us to intercept
 // all these calls and capture the output of tests
@@ -60,7 +60,7 @@ pub fn execute(
         const nocapture = {nocapture};
         {console_override}
 
-        global.__wbg_test_invoke = f => f();
+        globalThis.__wbg_test_invoke = f => f();
 
         async function main(tests) {{
             {args}
