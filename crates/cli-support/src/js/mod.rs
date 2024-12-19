@@ -153,7 +153,7 @@ impl<'a> Context<'a> {
     ) -> Result<Context<'a>, Error> {
         let mut typescript = "/* tslint:disable */\n/* eslint-disable */\n".to_string();
         if config.wasi {
-            typescript.push_str("import * as __wwrr from \"./wwrr.js\";\n");
+            typescript.push_str("import * as __wwrr from './wwrr.js';\n");
         }
 
         Ok(Context {
@@ -717,7 +717,7 @@ __wbg_set_wasm(wasm);"
             | OutputMode::Web
             | OutputMode::Deno => {
                 if self.wasi {
-                    imports.push_str(r#"import * as __wwrr from "./wwrr.js";"#);
+                    imports.push_str("import * as __wwrr from './wwrr.js';\n");
                 }
 
                 for (module, items) in crate::sorted_iter(&self.js_imports) {
