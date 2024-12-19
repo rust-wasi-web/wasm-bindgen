@@ -347,8 +347,14 @@ impl Bindgen {
             log::debug!("WASI module detected");
         }
 
+        // Perform thread transform for wasm32-unknown-unknown with atomics.
         let thread_count = wasm_bindgen_threads_xform::run(&mut module)
-            .with_context(|| "failed to prepare module for threading")?;
+            .context("failed to prepare module for threading")?;
+
+        // Perform wait transform for WASI.
+        if self.wasi {
+            wasm_bindgen_wait_xform::run(&mut module).context("wait transform failed")?;
+        }
 
         // If requested, turn all mangled symbols into prettier unmangled
         // symbols with the help of `rustc-demangle`.
