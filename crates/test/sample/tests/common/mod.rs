@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use sample::Timeout;
 use std::time::Duration;
 use wasm_bindgen_test::*;
