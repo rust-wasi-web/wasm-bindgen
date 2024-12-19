@@ -353,7 +353,9 @@ impl Bindgen {
 
         // Perform wait transform for WASI.
         if self.wasi {
-            wasm_bindgen_wait_xform::run(&mut module).context("wait transform failed")?;
+            //self.inject_clock_ns()?;
+            wasm_bindgen_wait_xform::run(&mut module, PLACEHOLDER_MODULE)
+                .context("wait transform failed")?;
         }
 
         // If requested, turn all mangled symbols into prettier unmangled

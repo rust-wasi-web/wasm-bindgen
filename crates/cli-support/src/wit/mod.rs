@@ -317,6 +317,7 @@ impl<'a> Context<'a> {
         let (import, import_id) =
             self.module
                 .add_import_func(PLACEHOLDER_MODULE, "__wbindgen_init_externref_table", ty);
+        self.module.funcs.get_mut(import).name = Some("__wbindgen_init_externref_table".into());
 
         if self.wasi {
             let mut builder = FunctionBuilder::new(&mut self.module.types, &[], &[]);
@@ -332,20 +333,6 @@ impl<'a> Context<'a> {
         }
 
         self.bind_intrinsic(import_id, Intrinsic::InitExternrefTable)?;
-
-        // So intrinsics are defined here.
-        // We cannot do it externally?
-        // But we also don't want to call that all the time?
-        // No, we need a way to call the performance.now function.
-        // but we can also just include it as a function, without the need.
-        // Shall we do that only on WASI or on all targets?
-        // Hmm, normal WASM does not have threads anyway so do it on WASI?
-        // Yeah, no need for non-WASI.
-
-        // Okay, so write the transform.
-        // Then add the performance function.
-        
-
 
         Ok(())
     }

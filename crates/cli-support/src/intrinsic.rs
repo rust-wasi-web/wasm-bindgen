@@ -313,5 +313,8 @@ intrinsics! {
         #[symbol = "__wbindgen_init_externref_table"]
         #[signature = fn() -> Unit]
         InitExternrefTable,
+        #[symbol = "__wbindgen_clock_ns"]
+        #[signature = fn() -> I64]
+        ClockNs,
     }
 }

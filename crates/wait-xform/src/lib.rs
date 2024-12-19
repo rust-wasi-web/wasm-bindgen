@@ -7,7 +7,7 @@
 //! issuing the wait operation.
 //!
 
-//#![deny(missing_docs, missing_debug_implementations)]
+#![deny(missing_docs, missing_debug_implementations)]
 
 use anyhow::{anyhow, Context, Error, Result};
 
@@ -20,6 +20,9 @@ use walrus::{
 /// Import name of function returning monotonic clock in nanoseconds.
 pub const CLOCK_NS_IMPORT: &str = "__wbindgen_clock_ns";
 
+/// Export name of global that informs us whether waiting is prohibited.
+pub const WAIT_PROHIBITED_GLOBAL: &str = "wait_prohibited";
+
 /// Supported memory argument.
 const MEM_ARG: MemArg = MemArg {
     align: 4,
@@ -27,9 +30,10 @@ const MEM_ARG: MemArg = MemArg {
 };
 
 /// Adds the `__wbindgen_clock_ns` function import.
-fn add_clock_ns_import(module: &mut Module) -> FunctionId {
+fn add_clock_ns_import(module: &mut Module, placeholder_module: &str) -> FunctionId {
     let ty = module.types.add(&[], &[ValType::I64]);
-    let (func, _) = module.add_import_func("wbg", CLOCK_NS_IMPORT, ty);
+    let (func, _) = module.add_import_func(placeholder_module, CLOCK_NS_IMPORT, ty);
+    module.funcs.get_mut(func).name = Some(CLOCK_NS_IMPORT.to_string());
     func
 }
 
@@ -38,10 +42,11 @@ fn add_wait_prohibited_global(module: &mut Module) -> GlobalId {
     let global =
         module
             .globals
-            .add_local(ValType::I32, true, true, ConstExpr::Value(Value::I32(0)));
+            .add_local(ValType::I32, true, false, ConstExpr::Value(Value::I32(0)));
+    module.globals.get_mut(global).name = Some(WAIT_PROHIBITED_GLOBAL.into());
     module
         .exports
-        .add("__wbindgen_wait_prohibited", ExportItem::Global(global));
+        .add(WAIT_PROHIBITED_GLOBAL, ExportItem::Global(global));
     global
 }
 
@@ -65,21 +70,22 @@ fn add_atomic_wait32_func(
     let expected = module.locals.add(ValType::I32);
     let timeout = module.locals.add(ValType::I64);
 
-    builder
-        .func_body()
-        .local_get(ptr)
-        .local_get(expected)
-        .local_get(timeout)
-        .global_get(wait_prohibited)
-        .if_else(
-            ValType::I32,
-            |then| {
-                then.call(atomic_spin32);
-            },
-            |else_| {
-                else_.atomic_wait(memory, MEM_ARG, false);
-            },
-        );
+    builder.func_body().global_get(wait_prohibited).if_else(
+        ValType::I32,
+        |then| {
+            then.local_get(ptr)
+                .local_get(expected)
+                .local_get(timeout)
+                .call(atomic_spin32);
+        },
+        |else_| {
+            else_
+                .local_get(ptr)
+                .local_get(expected)
+                .local_get(timeout)
+                .atomic_wait(memory, MEM_ARG, false);
+        },
+    );
 
     builder.finish(vec![ptr, expected, timeout], &mut module.funcs)
 }
@@ -114,7 +120,7 @@ fn add_atomic_spin32_func(
         .local_get(expected)
         .binop(BinaryOp::I32Ne)
         .if_else(
-            ValType::I32,
+            None,
             |then| {
                 // memory != expected, return 0
                 then.i32_const(0).return_();
@@ -126,6 +132,7 @@ fn add_atomic_spin32_func(
         .local_set(start_time)
         // spin loop
         .loop_(None, |spin_loop| {
+            let id = spin_loop.id();
             spin_loop
                 // check if memory still equals expected
                 .local_get(ptr)
@@ -133,7 +140,7 @@ fn add_atomic_spin32_func(
                 .local_get(expected)
                 .binop(BinaryOp::I32Ne)
                 .if_else(
-                    ValType::I32,
+                    None,
                     |then| {
                         // value changed, return 1
                         then.i32_const(1).return_();
@@ -143,18 +150,20 @@ fn add_atomic_spin32_func(
                 // still equal, check for timeout
                 .call(clock_ns)
                 .local_get(start_time)
-                .binop(BinaryOp::I32Sub)
+                .binop(BinaryOp::I64Sub)
                 .local_get(timeout)
-                .binop(BinaryOp::I32GeU)
+                .binop(BinaryOp::I64GeU)
                 .if_else(
-                    ValType::I32,
+                    None,
                     |then| {
                         // timeout exceeded, return 2
                         then.i32_const(2).return_();
                     },
                     |_| (),
-                );
-        });
+                )
+                .br(id);
+        })
+        .i32_const(0);
 
     builder.finish(vec![ptr, expected, timeout], &mut module.funcs)
 }
@@ -203,7 +212,7 @@ impl VisitorMut for ReplaceAtomicWait {
 /// Run the transformation.
 ///
 /// See the module-level docs for details on the transformation.
-pub fn run(module: &mut Module) -> Result<()> {
+pub fn run(module: &mut Module, placeholder_module: &str) -> Result<()> {
     // For now only one memory is supported.
     let memory = module
         .memories
@@ -213,7 +222,7 @@ pub fn run(module: &mut Module) -> Result<()> {
         .id();
 
     // Add necessary items to module.
-    let clock_ns = add_clock_ns_import(module);
+    let clock_ns = add_clock_ns_import(module, placeholder_module);
     let spin32_func = add_atomic_spin32_func(module, memory, clock_ns);
     let wait_prohibited = add_wait_prohibited_global(module);
     let wait32_func = add_atomic_wait32_func(module, memory, wait_prohibited, spin32_func);

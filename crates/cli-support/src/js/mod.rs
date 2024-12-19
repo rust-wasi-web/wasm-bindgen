@@ -11,6 +11,8 @@ use crate::{
     is_wasi_import, reset_indentation, Bindgen, EncodeInto, OutputMode, INIT_EXTERNREF_TABLE_NAME,
     PLACEHOLDER_MODULE,
 };
+use wasm_bindgen_wait_xform::WAIT_PROHIBITED_GLOBAL;
+
 use anyhow::{anyhow, bail, Context as _, Error};
 use binding::TsReference;
 use identifier::is_valid_ident;
@@ -1010,6 +1012,19 @@ __wbg_set_wasm(wasm);"
                     return wasm;
                 }}
 
+                function __wbg_wait_prohibited() {{
+                    try {{
+                        const sab = new SharedArrayBuffer(4);
+                        const ia = new Int32Array(sab);
+                        Atomics.wait(ia, 0, 0, 0);
+                        console.log('wait allowed');
+                        return false;
+                    }} catch (e) {{
+                        console.log('wait prohibited');
+                        return true;
+                    }}
+                }}
+
                 function initSync(module{init_memory_arg}) {{
                     if (wasm !== undefined) return wasm;
 
@@ -1079,6 +1094,7 @@ __wbg_set_wasm(wasm);"
 
                     __wbg_set_exports(instance.exports);
                     wasm.{INIT_EXTERNREF_TABLE_NAME}();
+                    wasm.{WAIT_PROHIBITED_GLOBAL}.value = __wbg_wait_prohibited() ? 1 : 0;
 
                     return instance;
                 }}
@@ -4052,6 +4068,11 @@ __wbg_set_wasm(wasm);"
                     base.push_str(&format!("table.set(offset + {}, {});\n", i, value));
                 }
                 base
+            }
+
+            Intrinsic::ClockNs => {
+                assert_eq!(args.len(), 0);
+                format!("BigInt(Math.round(performance.now() * 1000 * 1000))")
             }
         };
         Ok(expr)
