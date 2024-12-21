@@ -163,7 +163,7 @@ fn add_atomic_spin32_func(
                 )
                 .br(id);
         })
-        .i32_const(0);
+        .unreachable();
 
     builder.finish(vec![ptr, expected, timeout], &mut module.funcs)
 }
