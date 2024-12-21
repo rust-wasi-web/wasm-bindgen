@@ -353,7 +353,6 @@ impl Bindgen {
 
         // Perform wait transform for WASI.
         if self.wasi {
-            //self.inject_clock_ns()?;
             wasm_bindgen_wait_xform::run(&mut module, PLACEHOLDER_MODULE)
                 .context("wait transform failed")?;
         }

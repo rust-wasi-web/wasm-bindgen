@@ -950,8 +950,14 @@ __wbg_set_wasm(wasm);"
             }
         }
 
-        let js = format!(
+        let standalone = format!(
             "\
+                function __wbg_get_imports() {{
+                    const imports = {{}};
+                    {imports_init}
+                    return imports;
+                }}
+
                 async function __wbg_load(module, imports) {{
                     if (typeof Response === 'function' && module instanceof Response) {{
                         if (typeof WebAssembly.instantiateStreaming === 'function') {{
@@ -987,18 +993,6 @@ __wbg_set_wasm(wasm);"
                     }}
                 }}
 
-                {wasi_export} function __wbg_get_imports() {{
-                    const imports = {{}};
-                    {imports_init}
-                    return imports;
-                }}
-
-                {wasi_export} function __wbg_set_exports(exports) {{
-                    wasm = exports;
-                    {init_memviews}
-                    {init_stack_size_check}
-                }}
-
                 function __wbg_init_memory(imports, memory) {{
                     {init_memory}
                 }}
@@ -1010,19 +1004,6 @@ __wbg_set_wasm(wasm);"
                     {init_stack_size_check}
                     {start}
                     return wasm;
-                }}
-
-                function __wbg_wait_prohibited() {{
-                    try {{
-                        const sab = new SharedArrayBuffer(4);
-                        const ia = new Int32Array(sab);
-                        Atomics.wait(ia, 0, 0, 0);
-                        console.log('wait allowed');
-                        return false;
-                    }} catch (e) {{
-                        console.log('wait prohibited');
-                        return true;
-                    }}
                 }}
 
                 function initSync(module{init_memory_arg}) {{
@@ -1075,8 +1056,59 @@ __wbg_set_wasm(wasm);"
 
                     return __wbg_finalize_init(instance, module{init_stack_size_arg});
                 }}
+            ",
+            init_stack_size = if self.threads_enabled {
+                "let thread_stack_size"
+            } else {
+                ""
+            },
+            init_stack_size_arg = if self.threads_enabled {
+                ", thread_stack_size"
+            } else {
+                ""
+            },
+            init_stack_size_check = if self.threads_enabled {
+                format!(
+                    "if (typeof thread_stack_size !== 'undefined' && (typeof thread_stack_size !== 'number' || thread_stack_size === 0 || thread_stack_size % {} !== 0)) {{ throw 'invalid stack size' }}",
+                    wasm_bindgen_threads_xform::PAGE_SIZE,
+                )
+            } else {
+                String::new()
+            },
+            start = if needs_manual_start && self.threads_enabled {
+                "wasm.__wbindgen_start(thread_stack_size);"
+            } else if needs_manual_start {
+                "wasm.__wbindgen_start();"
+            } else {
+                ""
+            },
+        );
 
+        let wasi = format!(
+            "\
                 export const __runtimeLogConfig = {{}};
+
+                export function __wbg_get_imports() {{
+                    const imports = {{}};
+                    {imports_init}
+                    return imports;
+                }}
+
+                export function __wbg_set_exports(exports) {{
+                    wasm = exports;
+                    {init_memviews}
+                }}
+
+                function __wbg_wait_prohibited() {{
+                    try {{
+                        const sab = new SharedArrayBuffer(4);
+                        const ia = new Int32Array(sab);
+                        Atomics.wait(ia, 0, 0, 0);
+                        return false;
+                    }} catch (e) {{
+                        return true;
+                    }}
+                }}
 
                 async function __wbg_wasi_init(config) {{
                     if (wasm !== undefined) return wasm;
@@ -1098,39 +1130,9 @@ __wbg_set_wasm(wasm);"
 
                     return instance;
                 }}
-            ",
-            init_memory_arg = init_memory_arg,
-            default_module_path = default_module_path,
-            init_memory = init_memory,
-            init_memviews = init_memviews,
-            start = if needs_manual_start && self.threads_enabled {
-                "wasm.__wbindgen_start(thread_stack_size);"
-            } else if needs_manual_start {
-                "wasm.__wbindgen_start();"
-            } else {
-                ""
-            },
-            imports_init = imports_init,
-            init_stack_size = if self.threads_enabled {
-                "let thread_stack_size"
-            } else {
-                ""
-            },
-            init_stack_size_arg = if self.threads_enabled {
-                ", thread_stack_size"
-            } else {
-                ""
-            },
-            init_stack_size_check = if self.threads_enabled {
-                format!(
-                    "if (typeof thread_stack_size !== 'undefined' && (typeof thread_stack_size !== 'number' || thread_stack_size === 0 || thread_stack_size % {} !== 0)) {{ throw 'invalid stack size' }}",
-                    wasm_bindgen_threads_xform::PAGE_SIZE,
-                )
-            } else {
-                String::new()
-            },
-            wasi_export = if self.wasi {"export"} else {""},
-        );
+            ");
+
+        let js = if self.wasi { wasi } else { standalone };
 
         Ok((js, ts))
     }
