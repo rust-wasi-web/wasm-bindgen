@@ -152,7 +152,20 @@ fn main() -> anyhow::Result<()> {
         std::process::exit(0);
     }
 
-    let tmpdir = tempfile::tempdir()?;
+    //let tmpdir = tempfile::tempdir()?;
+
+    struct MyDir<'a>(&'a Path);
+    impl<'a> MyDir<'a> {
+        pub fn path(&self) -> &'a Path {
+            self.0
+        }
+    }
+    impl<'a> AsRef<Path> for MyDir<'a> {
+        fn as_ref(&self) -> &Path {
+            self.0
+        }
+    }
+    let tmpdir = MyDir(Path::new("C:\\bindgen"));
 
     let module = "wasm-bindgen-test";
 
