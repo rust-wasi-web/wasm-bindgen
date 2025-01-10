@@ -55,7 +55,6 @@ struct WorkerGuard(Worker);
 
 impl Drop for WorkerGuard {
     fn drop(&mut self) {
-        println!("terminating worker");
         self.0.terminate();
     }
 }
