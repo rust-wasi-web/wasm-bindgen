@@ -36,6 +36,7 @@ std = ["wasm-bindgen/std", "js-sys/std", "web-sys/std"]
 web-sys = { path = "../web-sys", version = "=0.3.76", default-features = false, features = [
   "MessageEvent",
   "Worker",
+  "WorkerOptions",
 ] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

@@ -43,25 +43,46 @@ use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::sync::atomic::AtomicI32;
 use js_sys::{Array, Promise};
+use std::rc::Rc;
 use wasm_bindgen::prelude::*;
-use web_sys::{MessageEvent, Worker};
+use web_sys::{MessageEvent, Worker, WorkerOptions};
+
+/// Number of web worker helpers to keep alive.
+const HELPER_CACHE_SIZE: usize = 32;
+
+/// A worker that is terminated when dropped.
+struct WorkerGuard(Worker);
+
+impl Drop for WorkerGuard {
+    fn drop(&mut self) {
+        println!("terminating worker");
+        self.0.terminate();
+    }
+}
 
 #[thread_local]
-static HELPERS: RefCell<Vec<Worker>> = RefCell::new(vec![]);
+static HELPERS: RefCell<Vec<Rc<WorkerGuard>>> = RefCell::new(vec![]);
 
-fn alloc_helper() -> Worker {
+fn alloc_helper() -> Rc<WorkerGuard> {
     if let Some(helper) = HELPERS.borrow_mut().pop() {
         return helper;
     }
 
+    let opts = WorkerOptions::new();
+    opts.set_name("atomic-wait-async");
+
     let worker_url = wasm_bindgen::link_to!(module = "/src/task/worker.js");
-    Worker::new(&worker_url).unwrap_or_else(|js| wasm_bindgen::throw_val(js))
+    let worker = Worker::new_with_options(&worker_url, &opts)
+        .unwrap_or_else(|js| wasm_bindgen::throw_val(js));
+
+    Rc::new(WorkerGuard(worker))
 }
 
-fn free_helper(helper: Worker) {
+fn free_helper(helper: Rc<WorkerGuard>) {
     let mut helpers = HELPERS.borrow_mut();
-    helpers.push(helper.clone());
-    helpers.truncate(10); // random arbitrary limit chosen here
+    if helpers.len() < HELPER_CACHE_SIZE {
+        helpers.push(helper);
+    }
 }
 
 pub fn wait_async(ptr: &AtomicI32, value: i32) -> Promise {
@@ -75,7 +96,9 @@ pub fn wait_async(ptr: &AtomicI32, value: i32) -> Promise {
             free_helper(helper_ref);
             drop(resolve.call1(&JsValue::NULL, &e.data()));
         });
-        helper.set_onmessage(Some(onmessage_callback.as_ref().unchecked_ref()));
+        helper
+            .0
+            .set_onmessage(Some(onmessage_callback.as_ref().unchecked_ref()));
 
         let data = Array::of3(
             &wasm_bindgen::memory(),
@@ -84,6 +107,7 @@ pub fn wait_async(ptr: &AtomicI32, value: i32) -> Promise {
         );
 
         helper
+            .0
             .post_message(&data)
             .unwrap_or_else(|js| wasm_bindgen::throw_val(js));
     })
