@@ -66,6 +66,7 @@ impl<T> ScopedKey<T> {
         f()
     }
 
+    #[track_caller]
     pub fn with<F, R>(&'static self, f: F) -> R
     where
         F: FnOnce(&T) -> R,
