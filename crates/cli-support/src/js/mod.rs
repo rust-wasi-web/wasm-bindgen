@@ -1110,6 +1110,8 @@ __wbg_set_wasm(wasm);"
             "\
                 export const __runtimeLogConfig = {{}};
 
+                let instance;
+
                 export function __wbg_get_imports() {{
                     const imports = {{}};
                     {imports_init}
@@ -1133,27 +1135,35 @@ __wbg_set_wasm(wasm);"
                 }}
 
                 async function __wbg_wasi_init(config) {{
-                    if (wasm !== undefined) return wasm;
+                    if (instance !== undefined) return instance;
 
                     await __wwrr.default();
                     __wwrr.initializeLogger(__runtimeLogConfig);
 
                     let module_or_path;
+                    if (typeof config === 'string')
+                        module_or_path = config;
+                    else
+                        module_or_path = config.module;
                     {default_module_path}
 
                     const moduleResponse = await __wbg_fetch(module_or_path);
                     const moduleData = new Uint8Array(await moduleResponse.arrayBuffer());
 
                     const imports = __wbg_get_imports();
-                    const instance = await __wwrr.loadWasix(moduleData, config, imports, import.meta.url);
+                    instance = await __wwrr.loadWasix(moduleData, config, imports, import.meta.url);
 
                     __wbg_set_exports(instance.exports);
                     wasm.{INIT_EXTERNREF_TABLE_NAME}();
                     wasm.{WAIT_PROHIBITED_GLOBAL}.value = __wbg_wait_prohibited() ? 1 : 0;
 
-                    return instance;
+                    if (typeof config === 'string')
+                        return instance.exports;
+                    else
+                        return instance;
                 }}
-            ");
+            "
+        );
 
         let js = shared.to_string() + if self.wasi { &wasi } else { &standalone };
 
