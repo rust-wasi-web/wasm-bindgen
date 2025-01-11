@@ -35,6 +35,7 @@ impl Worker {
 
 impl super::Formatter for Worker {
     fn writeln(&self, line: &str) {
+        println!("{line}");
         write_output_line(JsValue::from(String::from(line)));
     }
 

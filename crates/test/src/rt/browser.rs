@@ -49,6 +49,7 @@ impl Browser {
 
 impl super::Formatter for Browser {
     fn writeln(&self, line: &str) {
+        println!("{line}");
         let mut html = self.pre.text_content();
         html.extend(line.chars().chain(Some('\n')));
         self.pre.set_text_content(&html);
