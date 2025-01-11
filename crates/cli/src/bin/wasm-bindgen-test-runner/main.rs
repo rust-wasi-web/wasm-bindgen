@@ -14,11 +14,12 @@
 use anyhow::{bail, Context};
 use clap::Parser;
 use clap::ValueEnum;
-use std::env;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 use std::thread;
+use std::{env, io};
+use tempfile::TempDir;
 use wasm_bindgen_cli_support::Bindgen;
 
 mod deno;
@@ -152,20 +153,10 @@ fn main() -> anyhow::Result<()> {
         std::process::exit(0);
     }
 
-    //let tmpdir = tempfile::tempdir()?;
-
-    struct MyDir<'a>(&'a Path);
-    impl<'a> MyDir<'a> {
-        pub fn path(&self) -> &'a Path {
-            self.0
-        }
-    }
-    impl<'a> AsRef<Path> for MyDir<'a> {
-        fn as_ref(&self) -> &Path {
-            self.0
-        }
-    }
-    let tmpdir = MyDir(Path::new("C:\\bindgen"));
+    let test_dir = match std::env::var_os("WASM_BINDGEN_TEST_DIR") {
+        Some(dir) => Dir::permanent(dir)?,
+        None => Dir::temp()?,
+    };
 
     let module = "wasm-bindgen-test";
 
@@ -295,15 +286,15 @@ fn main() -> anyhow::Result<()> {
         .input_module(module, wasm)
         .keep_debug(false)
         .emit_start(false)
-        .generate(&tmpdir)
+        .generate(&test_dir)
         .context("executing `wasm-bindgen` over the Wasm file")?;
     shell.clear();
 
     match test_mode {
         TestMode::Node { no_modules } => {
-            node::execute(module, tmpdir.path(), cli, &tests, !no_modules, coverage)?
+            node::execute(module, test_dir.path(), cli, &tests, !no_modules, coverage)?
         }
-        TestMode::Deno => deno::execute(module, tmpdir.path(), cli, &tests)?,
+        TestMode::Deno => deno::execute(module, test_dir.path(), cli, &tests)?,
         TestMode::Browser { .. }
         | TestMode::DedicatedWorker { .. }
         | TestMode::SharedWorker { .. }
@@ -318,7 +309,7 @@ fn main() -> anyhow::Result<()> {
                 },
                 headless,
                 module,
-                tmpdir.path(),
+                test_dir.path(),
                 cli,
                 &tests,
                 test_mode,
@@ -419,4 +410,41 @@ fn coverage_args(file_name: &Path) -> PathBuf {
 enum FormatSetting {
     /// Display one character per test
     Terse,
+}
+
+/// Directory, either temporary or permanent.
+#[derive(Debug)]
+enum Dir {
+    /// Temporary directory.
+    Temp(TempDir),
+    /// Permanent directory.
+    Permanent(PathBuf),
+}
+
+impl Dir {
+    /// Creates a temporary directory.
+    pub fn temp() -> io::Result<Self> {
+        Ok(Self::Temp(tempfile::tempdir()?))
+    }
+
+    /// Uses a fixed directory and creates it as necessary.
+    pub fn permanent(path: impl AsRef<Path>) -> io::Result<Self> {
+        let path = path.as_ref();
+        fs::create_dir_all(&path)?;
+        Ok(Self::Permanent(path.to_path_buf()))
+    }
+
+    /// The path.
+    pub fn path(&self) -> &Path {
+        match self {
+            Self::Temp(temp) => temp.path(),
+            Self::Permanent(perm) => perm.as_path(),
+        }
+    }
+}
+
+impl AsRef<Path> for Dir {
+    fn as_ref(&self) -> &Path {
+        self.path()
+    }
 }

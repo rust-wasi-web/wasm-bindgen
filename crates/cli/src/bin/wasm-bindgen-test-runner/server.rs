@@ -140,7 +140,7 @@ pub(crate) fn spawn(
                 self.on_console_info = __wbgtest_console_info;
                 self.on_console_warn = __wbgtest_console_warn;
                 self.on_console_error = __wbgtest_console_error;
-                
+
                 {args}
 
                 await cx.run(tests.map(s => wasm[s]));
