@@ -289,8 +289,6 @@ pub(crate) fn spawn(
     let js_path = tmpdir.join("run.js");
     fs::write(&js_path, js_to_execute).context("failed to write JS file")?;
 
-    eprintln!("Written JS to {}", js_path.display());
-
     // For now, always run forever on this port. We may update this later!
     let tmpdir = tmpdir.to_path_buf();
     let srv = Server::new(addr, move |request| {
