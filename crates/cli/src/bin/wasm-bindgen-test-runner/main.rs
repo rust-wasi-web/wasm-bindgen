@@ -430,7 +430,17 @@ impl Dir {
     /// Uses a fixed directory and creates it as necessary.
     pub fn permanent(path: impl AsRef<Path>) -> io::Result<Self> {
         let path = path.as_ref();
+
         fs::create_dir_all(&path)?;
+        for entry in fs::read_dir(&path)? {
+            let entry = entry?;
+            if entry.file_type()?.is_dir() {
+                fs::remove_dir_all(entry.path())?;
+            } else {
+                fs::remove_file(entry.path())?;
+            }
+        }
+
         Ok(Self::Permanent(path.to_path_buf()))
     }
 
