@@ -12,6 +12,9 @@ use walrus::{Import, Module};
 pub(crate) const PLACEHOLDER_MODULE: &str = "__wbindgen_placeholder__";
 pub(crate) const INIT_EXTERNREF_TABLE_NAME: &str = "__wbg_init_externref_table";
 
+pub(crate) const WWRR_FILES: &[&str; 2] = &["wwrr_bg.wasm", "wwrr.js"];
+pub(crate) const WWRR_TS_FILES: &[&str; 1] = &["wwrr.d.ts"];
+
 mod decode;
 mod descriptor;
 mod descriptors;
@@ -42,12 +45,14 @@ pub struct Bindgen {
     split_linked_modules: bool,
     symbol_dispose: bool,
     wasi: bool,
+    wwrr_dir: Option<PathBuf>,
 }
 
 pub struct Output {
     module: walrus::Module,
     stem: String,
     generated: Generated,
+    wwrr_dir: Option<PathBuf>,
 }
 
 struct Generated {
@@ -59,6 +64,7 @@ struct Generated {
     local_modules: HashMap<String, String>,
     npm_dependencies: HashMap<String, (PathBuf, String)>,
     typescript: bool,
+    wasi: bool,
 }
 
 #[derive(Clone)]
@@ -111,6 +117,7 @@ impl Bindgen {
             split_linked_modules: false,
             symbol_dispose,
             wasi: false,
+            wwrr_dir: env::var_os("WWRR_DIR").map(|v| v.into()),
         }
     }
 
@@ -289,6 +296,12 @@ impl Bindgen {
         self
     }
 
+    /// Sets the path to the WWRR files.
+    pub fn wwrr_dir(&mut self, wwrr_dir: impl AsRef<Path>) -> &mut Bindgen {
+        self.wwrr_dir = Some(wwrr_dir.as_ref().to_path_buf());
+        self
+    }
+
     pub fn generate<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Error> {
         self.generate_output()?.emit(path.as_ref())
     }
@@ -458,12 +471,14 @@ impl Bindgen {
             js,
             ts,
             start,
+            wasi: self.wasi,
         };
 
         Ok(Output {
             module,
             stem: stem.to_string(),
             generated,
+            wwrr_dir: self.wwrr_dir.clone(),
         })
     }
 
@@ -748,6 +763,26 @@ export * from \"./{js_name}\";
             let ts = wasm2es6js::typescript(&self.module)?;
             fs::write(&ts_path, ts)
                 .with_context(|| format!("failed to write `{}`", ts_path.display()))?;
+        }
+
+        if gen.wasi {
+            let Some(wwrr_dir) = &self.wwrr_dir else {
+                bail!(
+                    "WWRR directory (command line option or WWRR_DIR environment variable) \
+                     must be specified for a WASI module"
+                )
+            };
+
+            let mut wwrr_files = WWRR_FILES.to_vec();
+            if gen.typescript {
+                wwrr_files.extend(WWRR_TS_FILES);
+            }
+
+            for wwrr_file in wwrr_files {
+                let src = wwrr_dir.join(wwrr_file);
+                fs::copy(&src, out_dir.join(wwrr_file))
+                    .with_context(|| format!("copying WWRR file {} failed", src.display()))?;
+            }
         }
 
         Ok(())

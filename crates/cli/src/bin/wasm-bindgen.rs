@@ -83,6 +83,12 @@ struct Args {
                 If a bundler is used, it needs to be set up accordingly."
     )]
     split_linked_modules: bool,
+    #[arg(
+        long,
+        help = "Sets the path to the WWRR files for WASI targets.\n\
+                Can also be set using the WWRR_DIR environment variable."
+    )]
+    wwrr_dir: Option<PathBuf>,
     input: PathBuf,
 }
 
@@ -145,6 +151,9 @@ fn rmain(args: &Args) -> Result<(), Error> {
             "never" => b.encode_into(EncodeInto::Never),
             s => bail!("invalid encode-into mode: `{}`", s),
         };
+    }
+    if let Some(wwrr_dir) = &args.wwrr_dir {
+        b.wwrr_dir(wwrr_dir);
     }
 
     let out_dir = match args.out_dir {
