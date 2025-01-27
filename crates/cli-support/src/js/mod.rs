@@ -753,7 +753,7 @@ __wbg_set_wasm(wasm);"
                 /** Runtime log configuration. */\n\
                 export const __runtimeLogConfig: __wwrr.LogConfig;\n\
                 /** Initializes the WASI reactor module. */\n\
-                export default function __wbg_wasi_init(config?: __wwrr.RunOptions);\n\
+                export default function __wbg_wasi_init(config?: __wwrr.RunOptions): Promise<__wwrr.WasiReactorInstance>;\n\
             "
             .to_string());
         }
