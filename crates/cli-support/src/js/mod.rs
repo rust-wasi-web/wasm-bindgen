@@ -950,31 +950,6 @@ __wbg_set_wasm(wasm);"
             }
         }
 
-        let shared = "\
-            function __wbg_runtime() {
-                if (typeof Deno !== 'undefined' && Deno?.version?.deno)
-                    return 'deno';
-                if (typeof process !== 'undefined' && process?.versions?.node)
-                    return 'node';
-                return 'web';
-            }
-
-            async function __wbg_fetch(url) {
-                if (__wbg_runtime() == 'node') {
-                    const { URL } = await import('url');
-                    const { readFile } = await import('fs/promises');
-                    const parsed = new URL(url);
-                    if (parsed.protocol === 'file:') {
-                        return new Response(await readFile(parsed), { 'Content-Type': 'application/wasm' });
-                    } else {
-                        return await fetch(url);
-                    }
-                }
-
-                return await fetch(url);
-            }
-        ";
-
         let standalone = format!(
             "\
                 function __wbg_get_imports() {{
@@ -1069,7 +1044,7 @@ __wbg_set_wasm(wasm);"
                     const imports = __wbg_get_imports();
 
                     if (typeof module_or_path === 'string' || (typeof Request === 'function' && module_or_path instanceof Request) || (typeof URL === 'function' && module_or_path instanceof URL)) {{
-                        module_or_path = __wbg_fetch(module_or_path);
+                        module_or_path = fetch(module_or_path);
                     }}
 
                     __wbg_init_memory(imports{init_memory_arg});
@@ -1147,7 +1122,7 @@ __wbg_set_wasm(wasm);"
                         module_or_path = config.module;
                     {default_module_path}
 
-                    const moduleResponse = await __wbg_fetch(module_or_path);
+                    const moduleResponse = await fetch(module_or_path);
                     const moduleData = new Uint8Array(await moduleResponse.arrayBuffer());
 
                     const imports = __wbg_get_imports();
@@ -1165,9 +1140,9 @@ __wbg_set_wasm(wasm);"
             "
         );
 
-        let js = shared.to_string() + if self.wasi { &wasi } else { &standalone };
+        let js = if self.wasi { &wasi } else { &standalone };
 
-        Ok((js, ts))
+        Ok((js.to_string(), ts))
     }
 
     fn write_classes(&mut self) -> Result<(), Error> {
