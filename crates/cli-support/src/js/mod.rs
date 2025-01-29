@@ -1112,15 +1112,18 @@ __wbg_set_wasm(wasm);"
                 async function __wbg_wasi_init(config) {{
                     if (instance !== undefined) return instance;
 
-                    await __wwrr.default();
-                    __wwrr.initializeLogger(__runtimeLogConfig);
-
                     let module_or_path;
-                    if (typeof config === 'string')
+                    let wwrr_module_or_path;
+                    if (typeof config === 'string') {{
                         module_or_path = config;
-                    else
+                    }} else {{
                         module_or_path = config.module;
+                        wwrr_module_or_path = config.wwrrModule;
+                    }}
                     {default_module_path}
+
+                    await __wwrr.default({{module_or_path: wwrr_module_or_path}});
+                    __wwrr.initializeLogger(__runtimeLogConfig);
 
                     const moduleResponse = await fetch(module_or_path);
                     const moduleData = new Uint8Array(await moduleResponse.arrayBuffer());
