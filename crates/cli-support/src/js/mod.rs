@@ -1119,6 +1119,9 @@ __wbg_set_wasm(wasm);"
                     }} else {{
                         module_or_path = config.module;
                         wwrr_module_or_path = config.wwrrModule;
+                        if (config.bindings == null) {{
+                            config.bindings = import.meta.url;
+                        }}
                     }}
                     {default_module_path}
 
@@ -1129,7 +1132,7 @@ __wbg_set_wasm(wasm);"
                     const moduleData = new Uint8Array(await moduleResponse.arrayBuffer());
 
                     const imports = __wbg_get_imports();
-                    instance = await __wwrr.loadWasix(moduleData, config, imports, import.meta.url);
+                    instance = await __wwrr.loadWasix(moduleData, config, imports);
 
                     __wbg_set_exports(instance.exports);
                     wasm.{INIT_EXTERNREF_TABLE_NAME}();
