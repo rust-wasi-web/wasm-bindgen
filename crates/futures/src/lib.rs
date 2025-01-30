@@ -52,28 +52,14 @@ use js_sys::Promise;
 use wasm_bindgen::prelude::*;
 
 mod queue;
+mod task;
+
 #[cfg_attr(docsrs, doc(cfg(feature = "futures-core-03-stream")))]
 #[cfg(feature = "futures-core-03-stream")]
 pub mod stream;
 
 pub use js_sys;
 pub use wasm_bindgen;
-
-mod task {
-    use cfg_if::cfg_if;
-
-    cfg_if! {
-        if #[cfg(target_feature = "atomics")] {
-            mod wait_async_polyfill;
-            mod multithread;
-            pub(crate) use multithread::*;
-
-        } else {
-            mod singlethread;
-            pub(crate) use singlethread::*;
-         }
-    }
-}
 
 cfg_if! {
     if #[cfg(all(target_feature = "atomics", target_os = "wasi"))] {
@@ -100,7 +86,7 @@ pub fn spawn_local<F>(future: F)
 where
     F: Future<Output = ()> + 'static,
 {
-    task::Task::spawn(Box::pin(future));
+    task::spawn(Box::pin(future));
 }
 
 struct Inner {

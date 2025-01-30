@@ -2,7 +2,10 @@ use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use core::cell::{Cell, RefCell};
 use js_sys::Promise;
+use once_cell::unsync::Lazy;
 use wasm_bindgen::prelude::*;
+
+use crate::task;
 
 #[wasm_bindgen]
 extern "C" {
@@ -15,18 +18,21 @@ extern "C" {
     fn hasQueueMicrotask(this: &Global) -> JsValue;
 }
 
-struct QueueState {
+struct QueueState<T> {
     // The queue of Tasks which are to be run in order. In practice this is all the
     // synchronous work of futures, and each `Task` represents calling `poll` on
     // a future "at the right time".
-    tasks: RefCell<VecDeque<Rc<crate::task::Task>>>,
+    tasks: RefCell<VecDeque<Rc<T>>>,
 
     // This flag indicates whether we've scheduled `run_all` to run in the future.
     // This is used to ensure that it's only scheduled once.
     is_scheduled: Cell<bool>,
 }
 
-impl QueueState {
+impl<T> QueueState<T>
+where
+    T: task::Task,
+{
     fn run_all(&self) {
         // "consume" the schedule
         let _was_scheduled = self.is_scheduled.replace(false);
@@ -49,16 +55,16 @@ impl QueueState {
     }
 }
 
-pub(crate) struct Queue {
-    state: Rc<QueueState>,
+pub(crate) struct Queue<T> {
+    state: Rc<QueueState<T>>,
     promise: Promise,
     closure: Closure<dyn FnMut(JsValue)>,
     has_queue_microtask: bool,
 }
 
-impl Queue {
+impl<T> Queue<T> {
     /// Schedule a task to run on the next tick
-    pub(crate) fn schedule_task(&self, task: Rc<crate::task::Task>) {
+    pub(crate) fn schedule_task(&self, task: Rc<T>) {
         self.state.tasks.borrow_mut().push_back(task);
         // Use queueMicrotask to execute as soon as possible. If it does not exist
         // fall back to the promise resolution
@@ -71,15 +77,17 @@ impl Queue {
         }
     }
     // Append a task to the currently running queue, or schedule it
-    #[cfg(not(target_feature = "atomics"))]
-    pub(crate) fn push_task(&self, task: Rc<crate::task::Task>) {
+    pub(crate) fn push_task(&self, task: Rc<T>) {
         // It would make sense to run this task on the same tick.  For now, we
         // make the simplifying choice of always scheduling tasks for a future tick.
         self.schedule_task(task)
     }
 }
 
-impl Queue {
+impl<T> Queue<T>
+where
+    T: task::Task + 'static,
+{
     fn new() -> Self {
         let state = Rc::new(QueueState {
             is_scheduled: Cell::new(false),
@@ -106,20 +114,30 @@ impl Queue {
             has_queue_microtask,
         }
     }
+}
 
+struct Wrapper<T>(Lazy<T>);
+
+#[cfg(not(target_feature = "atomics"))]
+unsafe impl<T> Sync for Wrapper<T> {}
+
+#[cfg(not(target_feature = "atomics"))]
+unsafe impl<T> Send for Wrapper<T> {}
+
+impl Queue<task::singlethread::Task> {
     pub(crate) fn with<R>(f: impl FnOnce(&Self) -> R) -> R {
-        use once_cell::unsync::Lazy;
-
-        struct Wrapper<T>(Lazy<T>);
-
-        #[cfg(not(target_feature = "atomics"))]
-        unsafe impl<T> Sync for Wrapper<T> {}
-
-        #[cfg(not(target_feature = "atomics"))]
-        unsafe impl<T> Send for Wrapper<T> {}
-
         #[cfg_attr(target_feature = "atomics", thread_local)]
-        static QUEUE: Wrapper<Queue> = Wrapper(Lazy::new(Queue::new));
+        static QUEUE: Wrapper<Queue<task::singlethread::Task>> = Wrapper(Lazy::new(Queue::new));
+
+        f(&QUEUE.0)
+    }
+}
+
+#[cfg(target_feature = "atomics")]
+impl Queue<task::multithread::Task> {
+    pub(crate) fn with<R>(f: impl FnOnce(&Self) -> R) -> R {
+        #[cfg_attr(target_feature = "atomics", thread_local)]
+        static QUEUE: Wrapper<Queue<task::multithread::Task>> = Wrapper(Lazy::new(Queue::new));
 
         f(&QUEUE.0)
     }

@@ -33,11 +33,11 @@ impl Task {
 
         *this.inner.borrow_mut() = Some(Inner { future, waker });
 
-        crate::queue::Queue::with(|queue| queue.schedule_task(this));
+        crate::queue::Queue::<Self>::with(|queue| queue.schedule_task(this));
     }
 
     fn force_wake(this: Rc<Self>) {
-        crate::queue::Queue::with(|queue| {
+        crate::queue::Queue::<Self>::with(|queue| {
             queue.push_task(this);
         });
     }
@@ -98,8 +98,10 @@ impl Task {
 
         RawWaker::new(Rc::into_raw(this) as *const (), &VTABLE)
     }
+}
 
-    pub(crate) fn run(&self) {
+impl super::Task for Task {
+    fn run(&self) {
         let mut borrow = self.inner.borrow_mut();
 
         // Wakeups can come in after a Future has finished and been destroyed,

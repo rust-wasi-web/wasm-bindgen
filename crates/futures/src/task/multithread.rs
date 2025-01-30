@@ -12,6 +12,8 @@ use core::sync::atomic::Ordering::SeqCst;
 use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 use wasm_bindgen::prelude::*;
 
+use super::Task as _;
+
 const SLEEPING: i32 = 0;
 const AWAKE: i32 = 1;
 
@@ -104,10 +106,12 @@ impl Task {
         *this.inner.borrow_mut() = Some(Inner { future, closure });
 
         // Queue up the Future's work to happen on the next microtask tick.
-        crate::queue::Queue::with(move |queue| queue.schedule_task(this));
+        crate::queue::Queue::<Self>::with(move |queue| queue.schedule_task(this));
     }
+}
 
-    pub(crate) fn run(&self) {
+impl super::Task for Task {
+    fn run(&self) {
         let mut borrow = self.inner.borrow_mut();
 
         // Same as `singlethread.rs`, handle spurious wakeups happening after we
