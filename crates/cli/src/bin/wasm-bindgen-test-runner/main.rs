@@ -318,9 +318,9 @@ fn main() -> anyhow::Result<()> {
 
     match test_mode {
         TestMode::Node { no_modules } => {
-            node::execute(module, test_dir.path(), cli, &tests, !no_modules, coverage)?
+            node::execute(module, test_dir.path(), cli, tests, !no_modules, coverage)?
         }
-        TestMode::Deno => deno::execute(module, test_dir.path(), cli, &tests)?,
+        TestMode::Deno => deno::execute(module, test_dir.path(), cli, tests)?,
         TestMode::Browser { .. }
         | TestMode::DedicatedWorker { .. }
         | TestMode::SharedWorker { .. }
