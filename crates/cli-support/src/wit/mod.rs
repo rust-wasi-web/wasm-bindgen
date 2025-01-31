@@ -530,18 +530,32 @@ impl<'a> Context<'a> {
             None => AuxExportKind::Function(export.function.name.to_string()),
         };
 
+        let args = Some(
+            export
+                .function
+                .args
+                .into_iter()
+                .map(|v| AuxFunctionArgumentData {
+                    name: v.name,
+                    ty_override: v.ty_override.map(String::from),
+                    desc: v.desc.map(String::from),
+                })
+                .collect::<Vec<_>>(),
+        );
         let id = self.export_adapter(export_id, descriptor)?;
         self.aux.export_map.insert(
             id,
             AuxExport {
                 debug_name: wasm_name,
                 comments: concatenate_comments(&export.comments),
-                arg_names: Some(export.function.arg_names),
+                args,
                 asyncness: export.function.asyncness,
                 kind,
                 generate_typescript: export.function.generate_typescript,
                 generate_jsdoc: export.function.generate_jsdoc,
                 variadic: export.function.variadic,
+                fn_ret_ty_override: export.function.ret_ty_override.map(String::from),
+                fn_ret_desc: export.function.ret_desc.map(String::from),
             },
         );
         Ok(())
@@ -955,7 +969,7 @@ impl<'a> Context<'a> {
                 getter_id,
                 AuxExport {
                     debug_name: format!("getter for `{}::{}`", struct_.name, field.name),
-                    arg_names: None,
+                    args: None,
                     asyncness: false,
                     comments: concatenate_comments(&field.comments),
                     kind: AuxExportKind::Method {
@@ -967,6 +981,8 @@ impl<'a> Context<'a> {
                     generate_typescript: field.generate_typescript,
                     generate_jsdoc: field.generate_jsdoc,
                     variadic: false,
+                    fn_ret_ty_override: None,
+                    fn_ret_desc: None,
                 },
             );
 
@@ -987,7 +1003,7 @@ impl<'a> Context<'a> {
                 setter_id,
                 AuxExport {
                     debug_name: format!("setter for `{}::{}`", struct_.name, field.name),
-                    arg_names: None,
+                    args: None,
                     asyncness: false,
                     comments: concatenate_comments(&field.comments),
                     kind: AuxExportKind::Method {
@@ -999,6 +1015,8 @@ impl<'a> Context<'a> {
                     generate_typescript: field.generate_typescript,
                     generate_jsdoc: field.generate_jsdoc,
                     variadic: false,
+                    fn_ret_ty_override: None,
+                    fn_ret_desc: None,
                 },
             );
         }

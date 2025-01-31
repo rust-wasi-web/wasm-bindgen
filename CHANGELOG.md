@@ -3,7 +3,21 @@
 
 ## Unreleased
 
+### Changed
+
+* Deprecate async constructors.
+  [#4402](https://github.com/rustwasm/wasm-bindgen/pull/4402)
+
+--------------------------------------------------------------------------------
+
+## [0.2.100](https://github.com/rustwasm/wasm-bindgen/compare/0.2.99...0.2.100)
+
+Released 2025-01-12
+
 ### Added
+
+* Add attributes to overwrite return (``unchecked_return_type`) and parameter types (`unchecked_param_type`), descriptions (`return_description` and `param_description`) as well as parameter names (`js_name`) for exported functions and methods. See the guide for more details.
+  [#4394](https://github.com/rustwasm/wasm-bindgen/pull/4394)
 
 * Add a `copy_to_uninit()` method to all `TypedArray`s. It takes `&mut [MaybeUninit<T>]` and returns `&mut [T]`.
   [#4340](https://github.com/rustwasm/wasm-bindgen/pull/4340)
@@ -16,6 +30,12 @@
 
 * Add `--list`, `--ignored`, `--exact` and `--nocapture` to `wasm-bindgen-test-runner`, analogous to `cargo test`.
   [#4356](https://github.com/rustwasm/wasm-bindgen/pull/4356)
+
+* Add bindings to `Date.to_locale_time_string_with_options`.
+  [#4384](https://github.com/rustwasm/wasm-bindgen/pull/4384)
+
+* `#[wasm_bindgen]` now correctly applies `#[cfg(...)]`s in `struct`s.
+  [#4351](https://github.com/rustwasm/wasm-bindgen/pull/4351)
 
 ### Changed
 
@@ -63,6 +83,15 @@
 
 * Error if URL in `<WEBDRIVER>_REMOTE` can't be parsed.
   [#4362](https://github.com/rustwasm/wasm-bindgen/pull/4362)
+
+* Internal functions are now removed instead of invalidly imported if they are unused.
+  [#4366](https://github.com/rustwasm/wasm-bindgen/pull/4366)
+
+* Fixed `no_std` support for all APIs in `web-sys`.
+  [#4378](https://github.com/rustwasm/wasm-bindgen/pull/4378)
+
+* Prevent generating duplicate exports for closure conversions.
+  [#4380](https://github.com/rustwasm/wasm-bindgen/pull/4380)
 
 --------------------------------------------------------------------------------
 
