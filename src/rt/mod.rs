@@ -449,14 +449,26 @@ pub unsafe extern "C" fn __wbindgen_realloc(
     new_size: usize,
     align: usize,
 ) -> *mut u8 {
+    #[cfg(debug_assertions)]
+    {
+        if old_size == 0 {
+            super::throw_str("realloc with zero old size");
+        }
+        if new_size == 0 {
+            super::throw_str("realloc with zero new size");
+        }
+    }
+
     debug_assert!(old_size > 0);
     debug_assert!(new_size > 0);
+
     if let Ok(layout) = Layout::from_size_align(old_size, align) {
         let ptr = realloc(ptr, layout, new_size);
         if !ptr.is_null() {
             return ptr;
         }
     }
+
     malloc_failure();
 }
 
