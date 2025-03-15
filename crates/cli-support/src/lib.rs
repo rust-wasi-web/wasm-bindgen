@@ -44,6 +44,7 @@ pub struct Bindgen {
     encode_into: EncodeInto,
     split_linked_modules: bool,
     symbol_dispose: bool,
+    wait: bool,
     wasi: bool,
     wwrr_dir: Option<PathBuf>,
 }
@@ -116,6 +117,7 @@ impl Bindgen {
             omit_default_module_path: true,
             split_linked_modules: false,
             symbol_dispose,
+            wait: false,
             wasi: false,
             wwrr_dir: env::var_os("WWRR_DIR").map(|v| v.into()),
         }
@@ -296,6 +298,12 @@ impl Bindgen {
         self
     }
 
+    /// Enables or disables the wait transform.
+    pub fn wait(&mut self, wait: bool) -> &mut Bindgen {
+        self.wait = wait;
+        self
+    }
+
     /// Sets the path to the WWRR files.
     pub fn wwrr_dir(&mut self, wwrr_dir: impl AsRef<Path>) -> &mut Bindgen {
         self.wwrr_dir = Some(wwrr_dir.as_ref().to_path_buf());
@@ -364,8 +372,9 @@ impl Bindgen {
         let thread_count = wasm_bindgen_threads_xform::run(&mut module)
             .context("failed to prepare module for threading")?;
 
-        // Perform wait transform for WASI.
-        if self.wasi {
+        // Perform wait transform for WASI or if explicitly requested.
+        if self.wasi || self.wait {
+            log::debug!("transformating atomics.wait into spinning on the main thread");
             wasm_bindgen_wait_xform::run(&mut module, PLACEHOLDER_MODULE)
                 .context("wait transform failed")?;
         }

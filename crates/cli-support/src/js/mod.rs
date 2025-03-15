@@ -85,6 +85,9 @@ pub struct Context<'a> {
     /// If threading is enabled.
     threads_enabled: bool,
 
+    /// Whether wait transform is applied.
+    wait: bool,
+
     /// Whether this is a WASI module.
     wasi: bool,
 }
@@ -179,6 +182,7 @@ impl<'a> Context<'a> {
             memories: Default::default(),
             table_indices: Default::default(),
             stack_pointer_shim_injected: false,
+            wait: config.wait,
             wasi: config.wasi,
         })
     }
@@ -949,6 +953,25 @@ __wbg_set_wasm(wasm);"
             }
         }
 
+        let wait_prohibited_fn = "\
+                function __wbg_wait_prohibited() {
+                    try {
+                        const sab = new SharedArrayBuffer(4);
+                        const ia = new Int32Array(sab);
+                        Atomics.wait(ia, 0, 0, 0);
+                        return false;
+                    } catch (e) {
+                        return true;
+                    }
+                }
+            ";
+
+        let check_wait_prohibited = if self.wait || self.wasi {
+            format!("wasm.{WAIT_PROHIBITED_GLOBAL}.value = __wbg_wait_prohibited() ? 1 : 0;")
+        } else {
+            String::new()
+        };
+
         let standalone = format!(
             "\
                 function __wbg_get_imports() {{
@@ -993,11 +1016,14 @@ __wbg_set_wasm(wasm);"
                     {init_memory}
                 }}
 
+                {wait_prohibited_fn}
+
                 function __wbg_finalize_init(instance, module{init_stack_size_arg}) {{
                     wasm = instance.exports;
                     __wbg_init.__wbindgen_wasm_module = module;
                     {init_memviews}
                     {init_stack_size_check}
+                    {check_wait_prohibited}
                     {start}
                     return wasm;
                 }}
@@ -1097,16 +1123,7 @@ __wbg_set_wasm(wasm);"
                     {init_memviews}
                 }}
 
-                function __wbg_wait_prohibited() {{
-                    try {{
-                        const sab = new SharedArrayBuffer(4);
-                        const ia = new Int32Array(sab);
-                        Atomics.wait(ia, 0, 0, 0);
-                        return false;
-                    }} catch (e) {{
-                        return true;
-                    }}
-                }}
+                {wait_prohibited_fn}
 
                 async function __wbg_wasi_init(config) {{
                     if (instance !== undefined) return instance;

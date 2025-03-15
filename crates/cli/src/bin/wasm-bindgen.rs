@@ -85,6 +85,12 @@ struct Args {
     split_linked_modules: bool,
     #[arg(
         long,
+        help = "Transforms atomics.wait into spinning on the main thread.\n\
+                This is always enabled for WASI targets."
+    )]
+    wait: bool,
+    #[arg(
+        long,
         help = "Sets the path to the WWRR files for WASI targets.\n\
                 Can also be set using the WWRR_DIR environment variable."
     )]
@@ -133,7 +139,8 @@ fn rmain(args: &Args) -> Result<(), Error> {
         .typescript(typescript)
         .omit_imports(args.omit_imports)
         .omit_default_module_path(args.omit_default_module_path)
-        .split_linked_modules(args.split_linked_modules);
+        .split_linked_modules(args.split_linked_modules)
+        .wait(args.wait);
     if args.reference_types {
         #[allow(deprecated)]
         b.reference_types(true);
