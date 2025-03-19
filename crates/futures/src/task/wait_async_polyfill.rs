@@ -44,6 +44,7 @@ use core::cell::RefCell;
 use core::sync::atomic::AtomicI32;
 use js_sys::{Array, Promise};
 use std::rc::Rc;
+use std::thread;
 use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, Worker, WorkerOptions};
 
@@ -62,17 +63,28 @@ impl Drop for WorkerGuard {
 #[thread_local]
 static HELPERS: RefCell<Vec<Rc<WorkerGuard>>> = RefCell::new(vec![]);
 
+#[thread_local]
+static ID: RefCell<usize> = RefCell::new(0);
+
 fn alloc_helper() -> Rc<WorkerGuard> {
     if let Some(helper) = HELPERS.borrow_mut().pop() {
         return helper;
     }
 
+    let mut id = ID.borrow_mut();
+
     let opts = WorkerOptions::new();
-    opts.set_name("atomic-wait-async");
+    opts.set_name(&format!(
+        "atomic-wait-async-{}{:?}-{id}",
+        option_env!("WBG_PKG").unwrap_or_default(),
+        thread::current().id(),
+    ));
 
     let worker_url = wasm_bindgen::link_to!(module = "/src/task/worker.js");
     let worker = Worker::new_with_options(&worker_url, &opts)
         .unwrap_or_else(|js| wasm_bindgen::throw_val(js));
+
+    *id = id.wrapping_add(1);
 
     Rc::new(WorkerGuard(worker))
 }
