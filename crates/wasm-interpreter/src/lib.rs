@@ -20,8 +20,8 @@
 
 use anyhow::{bail, ensure};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use walrus::ir::Instr;
-use walrus::{ElementId, FunctionId, LocalId, Module, TableId};
+use walrus::ir::{Instr, InstrSeq, InstrSeqId};
+use walrus::{ElementId, FunctionId, LocalFunction, LocalId, Module, TableId};
 
 /// A ready-to-go interpreter of a Wasm module.
 ///
@@ -71,7 +71,7 @@ impl Interpreter {
 
         // Give ourselves some memory and set the stack pointer
         // (the LLVM call stack, now the Wasm stack, global 0) to the top.
-        ret.mem = vec![0; 0x8000];
+        ret.mem = vec![0; 0x800000];
         ret.sp = ret.mem.len() as i32;
 
         // Figure out where the `__wbindgen_describe` imported function is, if
@@ -230,7 +230,10 @@ impl Interpreter {
         let mut frame = Frame {
             module,
             interp: self,
+            function_id: id,
+            local,
             locals: BTreeMap::new(),
+            branch: None,
             done: false,
         };
 
@@ -239,19 +242,7 @@ impl Interpreter {
             frame.locals.insert(*arg, *val);
         }
 
-        for (instr, _) in block.instrs.iter() {
-            if let Err(err) = frame.eval(instr) {
-                if let Some(name) = &module.funcs.get(id).name {
-                    panic!("{name}: {err}")
-                } else {
-                    panic!("{err}")
-                }
-            }
-
-            if frame.done {
-                break;
-            }
-        }
+        frame.exec(block);
         self.scratch.last().cloned()
     }
 }
@@ -259,11 +250,37 @@ impl Interpreter {
 struct Frame<'a> {
     module: &'a Module,
     interp: &'a mut Interpreter,
+    function_id: FunctionId,
+    local: &'a LocalFunction,
     locals: BTreeMap<LocalId, i32>,
+    branch: Option<InstrSeqId>,
     done: bool,
 }
 
 impl Frame<'_> {
+    fn exec(&mut self, block: &InstrSeq) {
+        for (instr, _) in block.instrs.iter() {
+            if let Err(err) = self.eval(instr) {
+                if let Some(name) = &self.module.funcs.get(self.function_id).name {
+                    panic!("{name}: {err}")
+                } else {
+                    panic!("{err}")
+                }
+            }
+
+            if let Some(branch) = self.branch {
+                if branch == block.id() {
+                    self.branch = None;
+                }
+                break;
+            }
+
+            if self.done {
+                break;
+            }
+        }
+    }
+
     fn eval(&mut self, instr: &Instr) -> anyhow::Result<()> {
         use walrus::ir::*;
 
@@ -291,6 +308,20 @@ impl Frame<'_> {
                 self.interp.sp = val;
             }
 
+            Instr::Unop(e) => {
+                let v = stack.pop().unwrap();
+                stack.push(match e.op {
+                    UnaryOp::I32Eqz => {
+                        if v == 0 {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                    op => bail!("invalid unary op {:?}", op),
+                })
+            }
+
             // Support simple arithmetic, mainly for the stack pointer
             // manipulation
             Instr::Binop(e) => {
@@ -299,6 +330,15 @@ impl Frame<'_> {
                 stack.push(match e.op {
                     BinaryOp::I32Sub => lhs - rhs,
                     BinaryOp::I32Add => lhs + rhs,
+                    BinaryOp::I32And => lhs & rhs,
+                    BinaryOp::I32Or => lhs | rhs,
+                    BinaryOp::I32Eq => {
+                        if lhs == rhs {
+                            1
+                        } else {
+                            0
+                        }
+                    }
                     op => bail!("invalid binary op {:?}", op),
                 });
             }
@@ -309,7 +349,7 @@ impl Frame<'_> {
             Instr::Load(e) => {
                 let address = stack.pop().unwrap();
                 ensure!(
-                    address > 0,
+                    address >= 0,
                     "Read a negative address value from the stack. Did we run out of memory?"
                 );
                 let address = address as u32 + e.arg.offset;
@@ -320,7 +360,7 @@ impl Frame<'_> {
                 let value = stack.pop().unwrap();
                 let address = stack.pop().unwrap();
                 ensure!(
-                    address > 0,
+                    address >= 0,
                     "Read a negative address value from the stack. Did we run out of memory?"
                 );
                 let address = address as u32 + e.arg.offset;
@@ -392,6 +432,15 @@ impl Frame<'_> {
                 if let Instr::ReturnCall(_) = instr {
                     log::debug!("return_call");
                     self.done = true;
+                }
+            }
+
+            Instr::Block(Block { seq }) => self.exec(self.local.block(*seq)),
+
+            Instr::BrIf(BrIf { block }) => {
+                if stack.pop().unwrap() != 0 {
+                    assert!(self.branch.is_none());
+                    self.branch = Some(*block);
                 }
             }
 
