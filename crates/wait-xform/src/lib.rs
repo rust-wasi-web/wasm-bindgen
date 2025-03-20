@@ -11,7 +11,9 @@
 
 use anyhow::{anyhow, Context, Error, Result};
 
-use walrus::ir::{dfs_pre_order_mut, BinaryOp, Call, Instr, LoadKind, MemArg, Value, VisitorMut};
+use walrus::ir::{
+    dfs_pre_order_mut, BinaryOp, Call, Instr, LoadKind, MemArg, UnaryOp, Value, VisitorMut,
+};
 use walrus::{
     ConstExpr, ExportItem, FunctionBuilder, FunctionId, GlobalId, InstrLocId, MemoryId, Module,
     ValType,
@@ -22,6 +24,12 @@ pub const CLOCK_NS_IMPORT: &str = "__wbindgen_clock_ns";
 
 /// Export name of global that informs us whether waiting is prohibited.
 pub const WAIT_PROHIBITED_GLOBAL: &str = "wait_prohibited";
+
+/// Export name of global that sets the maximum spin time.
+pub const MAX_SPIN_NS_GLOBAL: &str = "max_spin_ns";
+
+/// Default maximum spin time.
+const MAX_SPIN_NS: i64 = 3 * 1000 * 1000;
 
 /// Supported memory argument.
 const MEM_ARG: MemArg = MemArg {
@@ -37,7 +45,7 @@ fn add_clock_ns_import(module: &mut Module, placeholder_module: &str) -> Functio
     func
 }
 
-/// Adds the `__wbindgen_wait_prohibited` global.
+/// Adds the wait prohibited global.
 fn add_wait_prohibited_global(module: &mut Module) -> GlobalId {
     let global =
         module
@@ -47,6 +55,21 @@ fn add_wait_prohibited_global(module: &mut Module) -> GlobalId {
     module
         .exports
         .add(WAIT_PROHIBITED_GLOBAL, ExportItem::Global(global));
+    global
+}
+
+/// Adds the maximum spin time global.
+fn add_max_spin_ns_global(module: &mut Module) -> GlobalId {
+    let global = module.globals.add_local(
+        ValType::I64,
+        true,
+        false,
+        ConstExpr::Value(Value::I64(MAX_SPIN_NS)),
+    );
+    module.globals.get_mut(global).name = Some(MAX_SPIN_NS_GLOBAL.into());
+    module
+        .exports
+        .add(MAX_SPIN_NS_GLOBAL, ExportItem::Global(global));
     global
 }
 
@@ -95,6 +118,7 @@ fn add_atomic_spin32_func(
     module: &mut Module,
     memory: MemoryId,
     clock_ns: FunctionId,
+    max_spin_ns: GlobalId,
 ) -> FunctionId {
     let mut builder = FunctionBuilder::new(
         &mut module.types,
@@ -111,6 +135,8 @@ fn add_atomic_spin32_func(
 
     // Locals.
     let start_time = module.locals.add(ValType::I64);
+    let elapsed = module.locals.add(ValType::I64);
+    let max_spin_ns_local = module.locals.add(ValType::I64);
 
     builder
         .func_body()
@@ -130,6 +156,9 @@ fn add_atomic_spin32_func(
         // memory == expected, record start time
         .call(clock_ns)
         .local_set(start_time)
+        // cache max_spin_ns in local
+        .global_get(max_spin_ns)
+        .local_set(max_spin_ns_local)
         // spin loop
         .loop_(None, |spin_loop| {
             let id = spin_loop.id();
@@ -147,10 +176,11 @@ fn add_atomic_spin32_func(
                     },
                     |_| (),
                 )
-                // still equal, check for timeout
+                // get time
                 .call(clock_ns)
                 .local_get(start_time)
                 .binop(BinaryOp::I64Sub)
+                .local_tee(elapsed)
                 .local_get(timeout)
                 .binop(BinaryOp::I64GeU)
                 .if_else(
@@ -161,6 +191,29 @@ fn add_atomic_spin32_func(
                     },
                     |_| (),
                 )
+                // check for global spin timeout
+                .local_get(max_spin_ns_local)
+                .unop(UnaryOp::I64Eqz)
+                .if_else(
+                    None,
+                    |_| (),
+                    |else_| {
+                        // global spin timeout enabled
+                        else_
+                            .local_get(elapsed)
+                            .local_get(max_spin_ns_local)
+                            .binop(BinaryOp::I64GeU)
+                            .if_else(
+                                None,
+                                |then| {
+                                    // global spin timeout exceeded, crash
+                                    then.unreachable();
+                                },
+                                |_| (),
+                            );
+                    },
+                )
+                // repeat loop
                 .br(id);
         })
         .unreachable();
@@ -223,7 +276,8 @@ pub fn run(module: &mut Module, placeholder_module: &str) -> Result<()> {
 
     // Add necessary items to module.
     let clock_ns = add_clock_ns_import(module, placeholder_module);
-    let spin32_func = add_atomic_spin32_func(module, memory, clock_ns);
+    let max_spin_ns = add_max_spin_ns_global(module);
+    let spin32_func = add_atomic_spin32_func(module, memory, clock_ns, max_spin_ns);
     let wait_prohibited = add_wait_prohibited_global(module);
     let wait32_func = add_atomic_wait32_func(module, memory, wait_prohibited, spin32_func);
 
