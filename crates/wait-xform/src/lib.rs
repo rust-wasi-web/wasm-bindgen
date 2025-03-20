@@ -29,7 +29,7 @@ pub const WAIT_PROHIBITED_GLOBAL: &str = "wait_prohibited";
 pub const MAX_SPIN_NS_GLOBAL: &str = "max_spin_ns";
 
 /// Default maximum spin time.
-const MAX_SPIN_NS: i64 = 3 * 1000 * 1000 * 1000;
+const MAX_SPIN_NS: i64 = 10 * 1000 * 1000 * 1000;
 
 /// Supported memory argument.
 const MEM_ARG: MemArg = MemArg {
