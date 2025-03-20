@@ -125,7 +125,7 @@ impl super::Task for Task {
             // Also the same as `singlethread.rs`, flag ourselves as ready to
             // receive a notification.
             let prev = self.atomic.state.swap(SLEEPING, SeqCst);
-            
+
             // Tolerate spurious wakeups (Safari).
             // debug_assert_eq!(prev, AWAKE);
             let _ = prev;
