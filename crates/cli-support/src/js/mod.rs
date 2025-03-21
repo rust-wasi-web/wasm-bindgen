@@ -4122,6 +4122,12 @@ __wbg_set_wasm(wasm);"
                 assert_eq!(args.len(), 0);
                 format!("BigInt(Math.round(performance.now() * 1000 * 1000))")
             }
+
+            Intrinsic::SpinTimeout => {
+                assert_eq!(args.len(), 0);
+                r#"throw new Error("memory.atomic.wait32 timeout exceeded on main thread")"#
+                    .to_string()
+            }
         };
         Ok(expr)
     }

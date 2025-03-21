@@ -316,5 +316,8 @@ intrinsics! {
         #[symbol = "__wbindgen_clock_ns"]
         #[signature = fn() -> I64]
         ClockNs,
+        #[symbol = "__wbindgen_spin_timeout"]
+        #[signature = fn() -> Unit]
+        SpinTimeout,
     }
 }
