@@ -3,6 +3,7 @@
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::sync::Arc;
+use core::cell::OnceCell;
 use core::cell::RefCell;
 use core::future::Future;
 use core::mem::ManuallyDrop;
@@ -172,10 +173,49 @@ impl super::Task for Task {
     }
 }
 
+#[wasm_bindgen]
+extern "C" {
+    type Atomics;
+    type WaitAsyncResult;
+
+    #[wasm_bindgen(static_method_of = Atomics, js_name = waitAsync)]
+    fn wait_async(buf: &js_sys::Int32Array, index: u32, value: i32) -> WaitAsyncResult;
+
+    #[wasm_bindgen(static_method_of = Atomics, js_name = waitAsync, getter)]
+    fn get_wait_async() -> JsValue;
+
+    #[wasm_bindgen(method, getter, structural, js_name = async)]
+    fn async_(this: &WaitAsyncResult) -> bool;
+
+    #[wasm_bindgen(method, getter, structural)]
+    fn value(this: &WaitAsyncResult) -> js_sys::Promise;
+}
+
+fn user_agent() -> String {
+    let global = js_sys::global();
+    let navigator = js_sys::Reflect::get(&global, &JsValue::from_str("navigator"))
+        .ok()
+        .and_then(|nav| nav.dyn_into::<js_sys::Object>().ok());
+    navigator
+        .as_ref()
+        .and_then(|nav| js_sys::Reflect::get(nav, &JsValue::from_str("userAgent")).ok())
+        .and_then(|ua| ua.as_string())
+        .unwrap_or_default()
+}
+
+fn is_safari() -> bool {
+    let user_agent = user_agent();
+    user_agent.contains("Safari") && !user_agent.contains("Chrome")
+}
+
+fn is_wait_async_available() -> bool {
+    #[thread_local]
+    static AVAILABLE: OnceCell<bool> = OnceCell::new();
+    *AVAILABLE.get_or_init(|| !Atomics::get_wait_async().is_undefined() && !is_safari())
+}
+
 fn wait_async(ptr: &AtomicI32, current_value: i32) -> Option<js_sys::Promise> {
-    // If `Atomics.waitAsync` isn't defined then we use our fallback, otherwise
-    // we use the native function.
-    return if Atomics::get_wait_async().is_undefined() {
+    if !is_wait_async_available() {
         if ptr.load(SeqCst) == current_value {
             Some(crate::task::wait_async_polyfill::wait_async(
                 ptr,
@@ -193,23 +233,5 @@ fn wait_async(ptr: &AtomicI32, current_value: i32) -> Option<js_sys::Promise> {
         } else {
             None
         }
-    };
-
-    #[wasm_bindgen]
-    extern "C" {
-        type Atomics;
-        type WaitAsyncResult;
-
-        #[wasm_bindgen(static_method_of = Atomics, js_name = waitAsync)]
-        fn wait_async(buf: &js_sys::Int32Array, index: u32, value: i32) -> WaitAsyncResult;
-
-        #[wasm_bindgen(static_method_of = Atomics, js_name = waitAsync, getter)]
-        fn get_wait_async() -> JsValue;
-
-        #[wasm_bindgen(method, getter, structural, js_name = async)]
-        fn async_(this: &WaitAsyncResult) -> bool;
-
-        #[wasm_bindgen(method, getter, structural)]
-        fn value(this: &WaitAsyncResult) -> js_sys::Promise;
     }
 }
