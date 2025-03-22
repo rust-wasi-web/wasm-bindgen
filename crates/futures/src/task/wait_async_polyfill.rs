@@ -96,7 +96,7 @@ fn free_helper(helper: Rc<WorkerGuard>) {
     }
 }
 
-pub fn wait_async(ptr: &AtomicI32, value: i32) -> Promise {
+pub fn wait_async(ptr: &AtomicI32, value: i32, timeout: Option<i32>) -> Promise {
     Promise::new(&mut |resolve, _reject| {
         let helper = alloc_helper();
         let helper_ref = helper.clone();
@@ -111,10 +111,16 @@ pub fn wait_async(ptr: &AtomicI32, value: i32) -> Promise {
             .0
             .set_onmessage(Some(onmessage_callback.as_ref().unchecked_ref()));
 
-        let data = Array::of3(
+        let timeout = match timeout {
+            Some(timeout) => JsValue::from(timeout),
+            None => JsValue::undefined(),
+        };
+
+        let data = Array::of4(
             &wasm_bindgen::memory(),
             &JsValue::from(ptr.as_ptr() as u32 / 4),
             &JsValue::from(value),
+            &timeout,
         );
 
         helper

@@ -127,9 +127,10 @@ impl super::Task for Task {
             // receive a notification.
             let prev = self.atomic.state.swap(SLEEPING, SeqCst);
 
-            // Tolerate spurious wakeups (Safari).
-            // debug_assert_eq!(prev, AWAKE);
-            let _ = prev;
+            // Spurious wakeups can only occur on Safari.
+            if !is_safari() {
+                assert_eq!(prev, AWAKE, "spurious wakeup from Atomics.waitAsync");
+            }
 
             let poll = {
                 let mut cx = Context::from_waker(&self.waker);
@@ -204,8 +205,12 @@ fn user_agent() -> String {
 }
 
 fn is_safari() -> bool {
-    let user_agent = user_agent();
-    user_agent.contains("Safari") && !user_agent.contains("Chrome")
+    #[thread_local]
+    static IS_SAFARI: OnceCell<bool> = OnceCell::new();
+    *IS_SAFARI.get_or_init(|| {
+        let user_agent = user_agent();
+        user_agent.contains("Safari") && !user_agent.contains("Chrome")
+    })
 }
 
 fn is_wait_async_available() -> bool {
@@ -217,9 +222,14 @@ fn is_wait_async_available() -> bool {
 fn wait_async(ptr: &AtomicI32, current_value: i32) -> Option<js_sys::Promise> {
     if !is_wait_async_available() {
         if ptr.load(SeqCst) == current_value {
+            let timeout = match is_safari() {
+                true => Some(1000),
+                false => None,
+            };
             Some(crate::task::wait_async_polyfill::wait_async(
                 ptr,
                 current_value,
+                timeout,
             ))
         } else {
             None
