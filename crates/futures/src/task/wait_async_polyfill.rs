@@ -40,6 +40,7 @@
 
 use alloc::vec;
 use alloc::vec::Vec;
+use core::cell::Cell;
 use core::cell::RefCell;
 use core::sync::atomic::AtomicI32;
 use js_sys::{Array, Promise};
@@ -96,16 +97,60 @@ fn free_helper(helper: Rc<WorkerGuard>) {
     }
 }
 
+const LONG_WAIT_WARNING: Option<u32> = match option_env!("WBG_LONG_WAIT_WARNING") {
+    Some(t) => match u32::from_str_radix(t, 10) {
+        Ok(t) => Some(t),
+        Err(_) => None,
+    },
+    None => None,
+};
+
 pub fn wait_async(ptr: &AtomicI32, value: i32, timeout: Option<i32>) -> Promise {
     Promise::new(&mut |resolve, _reject| {
         let helper = alloc_helper();
         let helper_ref = helper.clone();
+
+        let done = match LONG_WAIT_WARNING {
+            Some(warning_timeout) => {
+                let done = Rc::new(Cell::new(false));
+
+                let timeout_closure = Closure::once_into_js({
+                    let done = done.clone();
+                    move || {
+                        if !done.get() {
+                            web_sys::console::trace_1(
+                                &format!("spawned task wait duration exceeds {warning_timeout} ms")
+                                    .into(),
+                            );
+                        }
+                    }
+                });
+
+                let global = js_sys::global();
+                let set_timeout = js_sys::Reflect::get(&global, &"setTimeout".into()).unwrap();
+                let set_timeout_fn = set_timeout.dyn_into::<js_sys::Function>().unwrap();
+                set_timeout_fn
+                    .call2(
+                        &global,
+                        timeout_closure.as_ref().unchecked_ref(),
+                        &JsValue::from_f64(warning_timeout as f64),
+                    )
+                    .unwrap();
+
+                Some(done)
+            }
+            None => None,
+        };
 
         let onmessage_callback = Closure::once_into_js(move |e: MessageEvent| {
             // Our helper is done waiting so it's available to wait on a
             // different location, so return it to the free list.
             free_helper(helper_ref);
             drop(resolve.call1(&JsValue::NULL, &e.data()));
+
+            if let Some(done) = done {
+                done.set(true);
+            }
         });
         helper
             .0
