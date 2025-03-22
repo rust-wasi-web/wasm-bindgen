@@ -216,7 +216,11 @@ fn is_safari() -> bool {
 fn is_wait_async_available() -> bool {
     #[thread_local]
     static AVAILABLE: OnceCell<bool> = OnceCell::new();
-    *AVAILABLE.get_or_init(|| !Atomics::get_wait_async().is_undefined() && !is_safari())
+    *AVAILABLE.get_or_init(|| {
+        option_env!("WBG_DISABLE_ATOMICS_WAIT_ASYNC").is_none()
+            && !Atomics::get_wait_async().is_undefined()
+            && !is_safari()
+    })
 }
 
 fn wait_async(ptr: &AtomicI32, current_value: i32) -> Option<js_sys::Promise> {
