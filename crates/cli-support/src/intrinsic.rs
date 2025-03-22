@@ -319,5 +319,8 @@ intrinsics! {
         #[symbol = "__wbindgen_spin_timeout"]
         #[signature = fn() -> Unit]
         SpinTimeout,
+        #[symbol = "__wbindgen_atomics_pause"]
+        #[signature = fn() -> Unit]
+        AtomicsPause,
     }
 }

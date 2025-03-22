@@ -953,7 +953,7 @@ __wbg_set_wasm(wasm);"
             }
         }
 
-        let wait_prohibited_fn = "\
+        let atomics_utils = "\
                 function __wbg_wait_prohibited() {
                     try {
                         const sab = new SharedArrayBuffer(4);
@@ -964,6 +964,10 @@ __wbg_set_wasm(wasm);"
                         return true;
                     }
                 }
+
+                const __wbg_atomics_pause_ref = (typeof Atomics?.pause === 'function')
+                    ? Atomics.pause
+                    : () => { };
             ";
 
         let check_wait_prohibited = if self.wait || self.wasi {
@@ -1016,7 +1020,7 @@ __wbg_set_wasm(wasm);"
                     {init_memory}
                 }}
 
-                {wait_prohibited_fn}
+                {atomics_utils}
 
                 function __wbg_finalize_init(instance, module{init_stack_size_arg}) {{
                     wasm = instance.exports;
@@ -1123,7 +1127,7 @@ __wbg_set_wasm(wasm);"
                     {init_memviews}
                 }}
 
-                {wait_prohibited_fn}
+                {atomics_utils}
 
                 async function __wbg_wasi_init(config) {{
                     if (instance !== undefined) return instance;
@@ -4127,6 +4131,11 @@ __wbg_set_wasm(wasm);"
                 assert_eq!(args.len(), 0);
                 r#"throw new Error("memory.atomic.wait32 timeout exceeded on main thread")"#
                     .to_string()
+            }
+
+            Intrinsic::AtomicsPause => {
+                assert_eq!(args.len(), 0);
+                "__wbg_atomics_pause_ref()".to_string()
             }
         };
         Ok(expr)

@@ -25,6 +25,9 @@ pub const CLOCK_NS_IMPORT: &str = "__wbindgen_clock_ns";
 /// Import name of function that is called when maximum spin time is exceeded.
 pub const SPIN_TIMEOUT_IMPORT: &str = "__wbindgen_spin_timeout";
 
+/// Import name of function calling Atomics.pause().
+pub const ATOMICS_PAUSE_IMPORT: &str = "__wbindgen_atomics_pause";
+
 /// Export name of global that informs us whether waiting is prohibited.
 pub const WAIT_PROHIBITED_GLOBAL: &str = "wait_prohibited";
 
@@ -53,6 +56,14 @@ fn add_spin_timeout_import(module: &mut Module, placeholder_module: &str) -> Fun
     let ty = module.types.add(&[], &[]);
     let (func, _) = module.add_import_func(placeholder_module, SPIN_TIMEOUT_IMPORT, ty);
     module.funcs.get_mut(func).name = Some(SPIN_TIMEOUT_IMPORT.to_string());
+    func
+}
+
+/// Adds the `__wbindgen_atomics_pause` function import.
+fn add_atomics_pause_import(module: &mut Module, placeholder_module: &str) -> FunctionId {
+    let ty = module.types.add(&[], &[]);
+    let (func, _) = module.add_import_func(placeholder_module, ATOMICS_PAUSE_IMPORT, ty);
+    module.funcs.get_mut(func).name = Some(ATOMICS_PAUSE_IMPORT.to_string());
     func
 }
 
@@ -131,6 +142,7 @@ fn add_atomic_spin32_func(
     clock_ns: FunctionId,
     max_spin_ns: GlobalId,
     spin_timeout: FunctionId,
+    atomics_pause: FunctionId,
 ) -> FunctionId {
     let mut builder = FunctionBuilder::new(
         &mut module.types,
@@ -225,6 +237,8 @@ fn add_atomic_spin32_func(
                             );
                     },
                 )
+                // thread pause hint
+                .call(atomics_pause)
                 // repeat loop
                 .br(id);
         })
@@ -289,8 +303,16 @@ pub fn run(module: &mut Module, placeholder_module: &str) -> Result<()> {
     // Add necessary items to module.
     let clock_ns = add_clock_ns_import(module, placeholder_module);
     let spin_timeout = add_spin_timeout_import(module, placeholder_module);
+    let atomics_pause = add_atomics_pause_import(module, placeholder_module);
     let max_spin_ns = add_max_spin_ns_global(module);
-    let spin32_func = add_atomic_spin32_func(module, memory, clock_ns, max_spin_ns, spin_timeout);
+    let spin32_func = add_atomic_spin32_func(
+        module,
+        memory,
+        clock_ns,
+        max_spin_ns,
+        spin_timeout,
+        atomics_pause,
+    );
     let wait_prohibited = add_wait_prohibited_global(module);
     let wait32_func = add_atomic_wait32_func(module, memory, wait_prohibited, spin32_func);
 
