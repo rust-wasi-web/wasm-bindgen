@@ -127,9 +127,8 @@ impl super::Task for Task {
             // receive a notification.
             let prev = self.atomic.state.swap(SLEEPING, SeqCst);
 
-            // Spurious wakeups can only occur on Safari.
-            if !is_safari() {
-                assert_eq!(prev, AWAKE, "spurious wakeup from Atomics.waitAsync");
+            if prev != AWAKE && !is_safari() {
+                eprintln!("spurious wakeup from Atomics.waitAsync with prev={prev} (should be {AWAKE})");
             }
 
             let poll = {
