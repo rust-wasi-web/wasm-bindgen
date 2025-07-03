@@ -128,7 +128,9 @@ impl super::Task for Task {
             let prev = self.atomic.state.swap(SLEEPING, SeqCst);
 
             if prev != AWAKE && !is_safari() {
-                eprintln!("spurious wakeup from Atomics.waitAsync with prev={prev} (should be {AWAKE})");
+                eprintln!(
+                    "spurious wakeup from Atomics.waitAsync with prev={prev} (should be {AWAKE})"
+                );
             }
 
             let poll = {
