@@ -1,13 +1,19 @@
 #![doc(html_root_url = "https://docs.rs/wasm-bindgen-shared/0.2")]
+#![no_std]
+
+extern crate alloc;
+
+use alloc::string::{String, ToString};
 
 pub mod identifier;
 #[cfg(test)]
 mod schema_hash_approval;
+pub mod tys;
 
 // This gets changed whenever our schema changes.
 // At this time versions of wasm-bindgen and wasm-bindgen-cli are required to have the exact same
 // SCHEMA_VERSION in order to work together.
-pub const SCHEMA_VERSION: &str = "0.2.100";
+pub const SCHEMA_VERSION: &str = "0.2.114";
 
 #[macro_export]
 macro_rules! shared_api {
@@ -33,6 +39,7 @@ macro_rules! shared_api {
         struct Import<'a> {
             module: Option<ImportModule<'a>>,
             js_namespace: Option<Vec<String>>,
+            reexport: Option<String>,
             kind: ImportKind<'a>,
         }
 
@@ -82,6 +89,7 @@ macro_rules! shared_api {
 
         enum OperationKind<'a> {
             Regular,
+            RegularThis,
             Getter(&'a str),
             Setter(&'a str),
             IndexingGetter,
@@ -110,6 +118,7 @@ macro_rules! shared_api {
             variant_values: Vec<&'a str>,
             comments: Vec<&'a str>,
             generate_typescript: bool,
+            js_namespace: Option<Vec<&'a str>>,
         }
 
         struct Export<'a> {
@@ -117,6 +126,7 @@ macro_rules! shared_api {
             comments: Vec<&'a str>,
             consumed: bool,
             function: Function<'a>,
+            js_namespace: Option<Vec<&'a str>>,
             method_kind: MethodKind<'a>,
             start: bool,
         }
@@ -127,6 +137,8 @@ macro_rules! shared_api {
             variants: Vec<EnumVariant<'a>>,
             comments: Vec<&'a str>,
             generate_typescript: bool,
+            js_namespace: Option<Vec<&'a str>>,
+            private: bool,
         }
 
         struct EnumVariant<'a> {
@@ -149,15 +161,19 @@ macro_rules! shared_api {
         struct FunctionArgumentData<'a> {
             name: String,
             ty_override: Option<&'a str>,
+            optional: bool,
             desc: Option<&'a str>,
         }
 
         struct Struct<'a> {
             name: &'a str,
+            rust_name: &'a str,
             fields: Vec<StructField<'a>>,
             comments: Vec<&'a str>,
             is_inspectable: bool,
             generate_typescript: bool,
+            js_namespace: Option<Vec<&'a str>>,
+            private: bool,
         }
 
         struct StructField<'a> {
@@ -176,6 +192,27 @@ macro_rules! shared_api {
         }
     }; // end of mac case
 } // end of mac definition
+
+/// Compute a "qualified name" by prepending the namespace (joined with `__`) to the js_name.
+/// When there is no namespace, this returns the js_name unchanged.
+/// This is used to disambiguate internal wasm symbols when the same js_name
+/// appears in different namespaces. `__` is used as the separator because
+/// double underscores are unlikely to appear in user-defined names.
+pub fn qualified_name(js_namespace: Option<&[impl AsRef<str>]>, js_name: &str) -> String {
+    match js_namespace {
+        Some(ns) if !ns.is_empty() => {
+            let mut name = ns
+                .iter()
+                .map(|s| s.as_ref())
+                .collect::<alloc::vec::Vec<_>>()
+                .join("__");
+            name.push_str("__");
+            name.push_str(js_name);
+            name
+        }
+        _ => js_name.to_string(),
+    }
+}
 
 pub fn new_function(struct_name: &str) -> String {
     let mut name = "__wbg_".to_string();
@@ -236,4 +273,19 @@ pub fn version() -> String {
         v.push(')');
     }
     v
+}
+
+pub fn escape_string(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => result.push_str("\\\\"),
+            '\n' => result.push_str("\\n"),
+            '\r' => result.push_str("\\r"),
+            '\'' => result.push_str("\\'"),
+            '"' => result.push_str("\\\""),
+            _ => result.push(c),
+        }
+    }
+    result
 }

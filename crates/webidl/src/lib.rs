@@ -12,27 +12,28 @@ emitted for the types and methods described in the WebIDL.
 mod constants;
 mod first_pass;
 mod generator;
-mod idl_type;
 mod traverse;
 mod util;
+mod wbg_type;
 
-use crate::first_pass::{CallbackInterfaceData, OperationData};
+use crate::first_pass::OperationData;
 use crate::first_pass::{FirstPass, FirstPassRecord, InterfaceData, OperationId};
 use crate::generator::{
-    Const, Dictionary, DictionaryField, Enum, EnumVariant, Function, Interface, InterfaceAttribute,
-    InterfaceAttributeKind, InterfaceMethod, Namespace,
+    Const, Dictionary, DictionaryField, DictionaryFieldSetter, Enum, EnumVariant, Function,
+    Interface, InterfaceAttribute, InterfaceAttributeKind, InterfaceMethod, Namespace,
+    NamespaceAttribute, NamespaceAttributeKind,
 };
-use crate::idl_type::ToIdlType;
 use crate::traverse::TraverseType;
 use crate::util::{
     camel_case_ident, get_rust_deprecated, getter_throws, is_structural, is_type_unstable,
-    optional_return_ty, read_dir, setter_throws, shouty_snake_case_ident, snake_case_ident, throws,
-    webidl_const_v_to_backend_const_v, TypePosition,
+    is_wbg_generic, optional_return_ty, read_dir, rust_ident, setter_throws,
+    shouty_snake_case_ident, snake_case_ident, throws, webidl_const_v_to_backend_const_v,
+    TypePosition,
 };
+use crate::wbg_type::ToWbgType;
 use anyhow::Context;
 use anyhow::Result;
 use constants::UNFLATTENED_ATTRIBUTES;
-use idl_type::{IdentifierType, IdlType};
 use proc_macro2::{Ident, TokenStream};
 use quote::ToTokens;
 use sourcefile::SourceFile;
@@ -42,18 +43,75 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{fmt, iter};
-use wasm_bindgen_backend::util::rust_ident;
+
 use weedle::attribute::ExtendedAttributeList;
 use weedle::common::Identifier;
 use weedle::dictionary::DictionaryMember;
-use weedle::interface::InterfaceMember;
 use weedle::Parse;
 
+/// Mark stable attributes that have unstable overrides with the same name.
+///
+/// When an unstable WebIDL defines an attribute with the same name as a stable
+/// attribute but with a different type (e.g., `double` instead of `long`), we
+/// need to generate both versions with appropriate `#[cfg]` guards:
+/// - Stable: `#[cfg(not(web_sys_unstable_apis))]`
+/// - Unstable: `#[cfg(web_sys_unstable_apis)]`
+fn mark_stable_attributes_with_unstable_overrides(attributes: &mut [InterfaceAttribute]) {
+    // Find attribute names that have both stable and unstable versions
+    let unstable_names: HashSet<String> = attributes
+        .iter()
+        .filter(|attr| attr.unstable)
+        .map(|attr| attr.js_name.clone())
+        .collect();
+
+    // Mark stable attributes that have an unstable counterpart
+    for attr in attributes.iter_mut() {
+        if !attr.unstable && unstable_names.contains(&attr.js_name) {
+            attr.has_unstable_override = true;
+        }
+    }
+}
+
+/// Mark stable methods that have unstable methods with the same Rust name.
+///
+/// This handles cross-operation name clashes: when a stable method from one source
+/// (e.g., interface) and an unstable method from another source (e.g., mixin) end up
+/// with the same Rust name. Both need cfg gates to avoid compile-time clashes:
+/// - Stable: `#[cfg(not(web_sys_unstable_apis))]`
+/// - Unstable: `#[cfg(web_sys_unstable_apis)]`
+fn mark_stable_methods_with_unstable_overrides(methods: &mut [InterfaceMethod]) {
+    // Collect Rust names of unstable methods
+    let unstable_names: HashSet<String> = methods
+        .iter()
+        .filter(|m| m.unstable)
+        .map(|m| m.name.to_string())
+        .collect();
+
+    // Mark stable methods that have an unstable counterpart with the same Rust name
+    for method in methods.iter_mut() {
+        if !method.unstable && unstable_names.contains(&method.name.to_string()) {
+            method.has_unstable_override = true;
+        }
+    }
+}
+
 /// Options to configure the conversion process
-#[derive(Debug)]
+#[derive(Default)]
 pub struct Options {
-    /// Whether to generate cfg features or not
+    /// Whether to generate per-type cfg features (`#[cfg(feature = "TypeName")]`)
     pub features: bool,
+    /// Whether to generate the next major unstable generics output for stable APIs.
+    /// Unstable APIs always use typed generics regardless of this flag.
+    pub next_unstable: std::cell::Cell<bool>,
+}
+
+impl std::fmt::Debug for Options {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Options")
+            .field("features", &self.features)
+            .field("next_unstable", &self.next_unstable.get())
+            .finish()
+    }
 }
 
 #[derive(Default)]
@@ -84,8 +142,9 @@ impl fmt::Display for WebIDLParseError {
 
 impl std::error::Error for WebIDLParseError {}
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub(crate) enum ApiStability {
+    #[default]
     Stable,
     Unstable,
 }
@@ -96,13 +155,7 @@ impl ApiStability {
     }
 }
 
-impl Default for ApiStability {
-    fn default() -> Self {
-        Self::Stable
-    }
-}
-
-fn parse_source(source: &str) -> Result<Vec<weedle::Definition>> {
+fn parse_source(source: &str) -> Result<Vec<weedle::Definition<'_>>> {
     match weedle::Definitions::parse(source) {
         Ok(("", parsed)) => Ok(parsed),
 
@@ -113,7 +166,7 @@ fn parse_source(source: &str) -> Result<Vec<weedle::Definition>> {
         }
 
         Err(weedle::Err::Incomplete(needed)) => {
-            Err(anyhow::anyhow!("needed {:?} more bytes", needed))
+            Err(anyhow::anyhow!("needed {needed:?} more bytes"))
         }
     }
 }
@@ -124,7 +177,10 @@ fn parse(
     unstable_source: &str,
     options: Options,
 ) -> Result<BTreeMap<String, Program>> {
-    let mut first_pass_record: FirstPassRecord = Default::default();
+    let mut first_pass_record = FirstPassRecord {
+        options,
+        ..Default::default()
+    };
 
     let definitions = parse_source(webidl_source)?;
     definitions.first_pass(&mut first_pass_record, ApiStability::Stable)?;
@@ -153,47 +209,27 @@ fn parse(
     for (js_name, e) in first_pass_record.enums.iter() {
         let name = rust_ident(&camel_case_ident(js_name));
         let program = types.entry(name.to_string()).or_default();
-        first_pass_record.append_enum(&options, program, name, js_name, e);
+        first_pass_record.append_enum(program, name, js_name, e);
     }
     for (js_name, d) in first_pass_record.dictionaries.iter() {
         let name = rust_ident(&camel_case_ident(js_name));
         let program = types.entry(name.to_string()).or_default();
-        first_pass_record.append_dictionary(
-            &options,
-            program,
-            name,
-            js_name.to_string(),
-            d,
-            &unstable_types,
-        );
+        first_pass_record.append_dictionary(program, name, js_name.to_string(), d, &unstable_types);
     }
     for (js_name, n) in first_pass_record.namespaces.iter() {
         let name = rust_ident(&snake_case_ident(js_name));
         let program = types.entry(name.to_string()).or_default();
-        first_pass_record.append_ns(&options, program, name, js_name.to_string(), n);
+        first_pass_record.append_ns(program, name, js_name.to_string(), n);
     }
     for (js_name, d) in first_pass_record.interfaces.iter() {
         let name = rust_ident(&camel_case_ident(js_name));
         let program = types.entry(name.to_string()).or_default();
-        first_pass_record.append_interface(
-            &options,
-            program,
-            name,
-            js_name.to_string(),
-            &unstable_types,
-            d,
-        );
+        first_pass_record.append_interface(program, name, js_name.to_string(), &unstable_types, d);
     }
-    for (js_name, d) in first_pass_record.callback_interfaces.iter() {
+    for (js_name, data) in first_pass_record.callback_interfaces.iter() {
         let name = rust_ident(&camel_case_ident(js_name));
         let program = types.entry(name.to_string()).or_default();
-        first_pass_record.append_callback_interface(
-            &options,
-            program,
-            name,
-            js_name.to_string(),
-            d,
-        );
+        first_pass_record.append_callback_interface(program, name, js_name, data);
     }
 
     Ok(types)
@@ -237,9 +273,105 @@ pub fn compile(
 }
 
 impl<'src> FirstPassRecord<'src> {
+    fn append_callback_interface(
+        &self,
+        program: &mut Program,
+        name: Ident,
+        js_name: &str,
+        data: &first_pass::CallbackInterfaceData,
+    ) {
+        use quote::quote;
+
+        // In next_unstable mode, don't generate callback interface dict types
+        // They are replaced with typed callbacks
+        if self.options.next_unstable.get() {
+            return;
+        }
+
+        let features_doc = if self.options.features {
+            format!(
+                "\n\n*This API requires the following crate features to be activated: `{name}`*",
+            )
+        } else {
+            String::new()
+        };
+
+        let type_doc = format!("The `{js_name}` dictionary.{features_doc}");
+        let new_doc = format!("Construct a new `{js_name}`.{features_doc}");
+
+        // Generate getter/setter/builder for callback interfaces with a method
+        let (extern_methods, impl_methods) = if let Some(method_name) = data.method_name {
+            let getter_name = rust_ident(&format!("get_{}", snake_case_ident(method_name)));
+            let setter_name = rust_ident(&format!("set_{}", snake_case_ident(method_name)));
+            let builder_name = rust_ident(&snake_case_ident(method_name));
+
+            let getter_doc =
+                format!("Get the `{method_name}` field of this object.{features_doc}",);
+            let setter_doc =
+                format!("Change the `{method_name}` field of this object.{features_doc}",);
+
+            let extern_methods = quote! {
+                #[doc = #getter_doc]
+                #[wasm_bindgen(method, getter = #method_name)]
+                pub fn #getter_name(this: &#name) -> Option<::js_sys::Function>;
+
+                #[doc = #setter_doc]
+                #[wasm_bindgen(method, setter = #method_name)]
+                pub fn #setter_name(this: &#name, val: &::js_sys::Function);
+            };
+
+            let deprecated_msg = format!("Use `{setter_name}()` instead.");
+            let impl_methods = quote! {
+                #[deprecated = #deprecated_msg]
+                pub fn #builder_name(&mut self, val: &::js_sys::Function) -> &mut Self {
+                    self.#setter_name(val);
+                    self
+                }
+            };
+
+            (extern_methods, impl_methods)
+        } else {
+            (quote! {}, quote! {})
+        };
+
+        let tokens = quote! {
+            #![allow(unused_imports)]
+            #![allow(clippy::all)]
+            use super::*;
+            use wasm_bindgen::prelude::*;
+
+            #[wasm_bindgen]
+            extern "C" {
+                #[wasm_bindgen(extends = ::js_sys::Object, js_name = #name)]
+                #[derive(Debug, Clone, PartialEq, Eq)]
+                #[doc = #type_doc]
+                pub type #name;
+
+                #extern_methods
+            }
+
+            impl #name {
+                #[doc = #new_doc]
+                pub fn new() -> Self {
+                    #[allow(unused_mut)]
+                    let mut ret: Self = ::wasm_bindgen::JsCast::unchecked_into(::js_sys::Object::new());
+                    ret
+                }
+
+                #impl_methods
+            }
+
+            impl Default for #name {
+                fn default() -> Self {
+                    Self::new()
+                }
+            }
+        };
+        tokens.to_tokens(&mut program.tokens);
+    }
+
     fn append_enum(
         &self,
-        options: &Options,
         program: &mut Program,
         name: Ident,
         js_name: &str,
@@ -273,7 +405,7 @@ impl<'src> FirstPassRecord<'src> {
             variants,
             unstable,
         }
-        .generate(options)
+        .generate(&self.options)
         .to_tokens(&mut program.tokens);
     }
 
@@ -281,7 +413,6 @@ impl<'src> FirstPassRecord<'src> {
     // https://www.w3.org/TR/WebIDL-1/#idl-dictionaries
     fn append_dictionary(
         &self,
-        options: &Options,
         program: &mut Program,
         name: Ident,
         js_name: String,
@@ -296,6 +427,10 @@ impl<'src> FirstPassRecord<'src> {
         assert_eq!(js_name, def.identifier.0);
 
         let unstable = data.stability.is_unstable();
+        let wbg_generic = def
+            .attributes
+            .as_ref()
+            .is_some_and(|a| is_wbg_generic(Some(a)));
 
         let mut fields = Vec::new();
 
@@ -307,6 +442,7 @@ impl<'src> FirstPassRecord<'src> {
             &js_name,
             &mut fields,
             unstable,
+            wbg_generic,
             unstable_types,
             &deprecated,
         ) {
@@ -320,7 +456,7 @@ impl<'src> FirstPassRecord<'src> {
             unstable,
             deprecated,
         }
-        .generate(options)
+        .generate(&self.options)
         .to_tokens(&mut program.tokens);
     }
 
@@ -329,6 +465,7 @@ impl<'src> FirstPassRecord<'src> {
         dict: &'src str,
         dst: &mut Vec<DictionaryField>,
         unstable: bool,
+        wbg_generic: bool,
         unstable_types: &HashSet<Identifier>,
         parent_deprecated: &Option<Option<String>>,
     ) -> bool {
@@ -343,6 +480,7 @@ impl<'src> FirstPassRecord<'src> {
                 parent.identifier.0,
                 dst,
                 unstable,
+                wbg_generic,
                 unstable_types,
                 parent_deprecated,
             ) {
@@ -364,7 +502,13 @@ impl<'src> FirstPassRecord<'src> {
                 .zip(iter::repeat(unstable || d.stability.is_unstable()))
         });
         for (member, unstable) in members.zip(iter::repeat(unstable)).chain(partials) {
-            match self.dictionary_field(member, unstable, unstable_types, parent_deprecated) {
+            match self.dictionary_field(
+                member,
+                unstable,
+                wbg_generic,
+                unstable_types,
+                parent_deprecated,
+            ) {
                 Some(f) => dst.push(f),
                 None => {
                     log::warn!(
@@ -390,6 +534,7 @@ impl<'src> FirstPassRecord<'src> {
         &self,
         field: &'src DictionaryMember<'src>,
         unstable: bool,
+        wbg_generic: bool,
         unstable_types: &HashSet<Identifier>,
         parent_deprecated: &Option<Option<String>>,
     ) -> Option<DictionaryField> {
@@ -398,61 +543,81 @@ impl<'src> FirstPassRecord<'src> {
             false => is_type_unstable(&field.type_, unstable_types),
         };
 
-        let idl_type = field.type_.to_idl_type(self);
-
-        let is_js_value_ref_option_type = match &idl_type {
-            idl_type::IdlType::Nullable(ty) => match **ty {
-                idl_type::IdlType::Any => true,
-                IdlType::FrozenArray(ref _idl_type) | IdlType::Sequence(ref _idl_type) => true,
-                idl_type::IdlType::Union(ref types) => !types.iter().all(|idl_type| {
-                    matches!(
-                        idl_type,
-                        IdlType::Identifier {
-                            ty: IdentifierType::Interface(..),
-                            ..
-                        }
-                    )
-                }),
-                _ => false,
-            },
-            _ => false,
-        };
+        let wbg_type = field.type_.to_wbg_type(self);
 
         // use argument position now as we're just binding setters
-        let ty = idl_type
-            .to_syn_type(TypePosition::Argument, false)
-            .unwrap_or(None)?;
+        // Unstable APIs always use typed generics; stable uses legacy by default.
+        // [WbgGeneric] on the dictionary definition opts into typed generics.
+        let generics_compat = if unstable_override || wbg_generic {
+            false
+        } else {
+            !self.options.next_unstable.get()
+        };
 
-        let mut return_ty = idl_type
-            .to_syn_type(TypePosition::Return, false)
-            .unwrap()
-            .unwrap();
+        // In legacy mode (no generics), nullable sequences/arrays collapse to &JsValue
+        // for the setter, with the builder using unwrap_or(&JsValue::NULL).
+        // With generics enabled, the types are precise (e.g. Option<&[T]>) so no collapse needed.
+        let is_js_value_ref_option_type = generics_compat
+            && match &wbg_type {
+                wbg_type::WbgType::JsOption(ty) => match **ty {
+                    wbg_type::WbgType::Any => true,
+                    wbg_type::WbgType::FrozenArray(..) | wbg_type::WbgType::Sequence(..) => true,
+                    wbg_type::WbgType::Union(ref types) => !types.iter().all(|wbg_type| {
+                        matches!(
+                            wbg_type,
+                            wbg_type::WbgType::Identifier {
+                                ty: wbg_type::IdentifierType::Interface(..),
+                                ..
+                            }
+                        )
+                    }),
+                    _ => false,
+                },
+                _ => false,
+            };
+
+        let ty = wbg_type
+            .to_syn_type(TypePosition::ARGUMENT, false, generics_compat)
+            .ok()
+            .flatten()?;
+
+        let mut return_ty = wbg_type
+            .to_syn_type(TypePosition::RETURN, false, generics_compat)
+            .ok()
+            .flatten()?;
 
         if field.required.is_none() {
             return_ty = optional_return_ty(return_ty);
         }
 
-        // Slice types aren't supported because they don't implement
-        // `Into<JsValue>`
-        match ty {
-            syn::Type::Reference(ref i) if matches!(&*i.elem, syn::Type::Slice(_)) => return None,
-            syn::Type::Path(ref path, ..) =>
-            // check that our inner don't contains slices either
-            {
-                for seg in path.path.segments.iter() {
-                    if let syn::PathArguments::AngleBracketed(ref arg) = seg.arguments {
-                        for elem in &arg.args {
-                            if let syn::GenericArgument::Type(syn::Type::Reference(ref i)) = elem {
-                                if matches!(&*i.elem, syn::Type::Slice(_)) {
-                                    return None;
+        // In legacy mode (no generics), slice types aren't supported because
+        // they don't implement `Into<JsValue>`. With generics enabled,
+        // &[T] where T: ErasableGeneric is supported via IntoWasmAbi.
+        if generics_compat {
+            match ty {
+                syn::Type::Reference(ref i) if matches!(&*i.elem, syn::Type::Slice(_)) => {
+                    return None
+                }
+                syn::Type::Path(ref path, ..) =>
+                // check that our inner don't contains slices either
+                {
+                    for seg in path.path.segments.iter() {
+                        if let syn::PathArguments::AngleBracketed(ref arg) = seg.arguments {
+                            for elem in &arg.args {
+                                if let syn::GenericArgument::Type(syn::Type::Reference(ref i)) =
+                                    elem
+                                {
+                                    if matches!(&*i.elem, syn::Type::Slice(_)) {
+                                        return None;
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-            _ => (),
-        };
+                _ => (),
+            };
+        }
 
         // Similarly i64/u64 aren't supported because they don't
         // implement `Into<JsValue>`
@@ -468,12 +633,61 @@ impl<'src> FirstPassRecord<'src> {
             return None;
         }
 
+        // Expand union types into multiple type-safe setters.
+        // In stable mode: the first setter is the &JsValue fallback (unsuffixed),
+        //   typed variants get suffixes.
+        // In unstable mode: no JsValue fallback, first typed variant is unsuffixed,
+        //   remaining typed variants get suffixes.
+        let flattened_types = wbg_type.flatten(None);
+        let setter_types = if flattened_types.len() > 1 {
+            let mut setters = Vec::new();
+
+            // In stable mode, add the JsValue fallback as the unsuffixed setter
+            if generics_compat {
+                setters.push(DictionaryFieldSetter {
+                    ty: ty.clone(),
+                    name_suffix: None,
+                    deprecated: false,
+                });
+            }
+
+            for flattened in &flattened_types {
+                if let Some(setter_ty) = flattened
+                    .to_syn_type(TypePosition::ARGUMENT, false, generics_compat)
+                    .ok()
+                    .flatten()
+                {
+                    let mut suffix = String::new();
+                    flattened.push_snake_case_name(&mut suffix);
+                    // In unstable mode, the first typed setter gets the unsuffixed name
+                    let name_suffix = if !generics_compat && setters.is_empty() {
+                        None
+                    } else {
+                        Some(suffix)
+                    };
+                    setters.push(DictionaryFieldSetter {
+                        ty: setter_ty,
+                        name_suffix,
+                        deprecated: false,
+                    });
+                }
+            }
+            setters
+        } else {
+            vec![DictionaryFieldSetter {
+                ty: ty.clone(),
+                name_suffix: None,
+                deprecated: false,
+            }]
+        };
+
         Some(DictionaryField {
             required: field.required.is_some(),
             name: snake_case_ident(field.identifier.0),
             js_name: field.identifier.0.to_string(),
             ty,
             return_ty,
+            setter_types,
             is_js_value_ref_option_type,
             unstable: unstable_override,
             deprecated: get_rust_deprecated(&field.attributes)
@@ -483,34 +697,40 @@ impl<'src> FirstPassRecord<'src> {
 
     fn append_ns(
         &'src self,
-        options: &Options,
         program: &mut Program,
         name: Ident,
         js_name: String,
         ns: &'src first_pass::NamespaceData<'src>,
     ) {
         let unstable = ns.stability.is_unstable();
+        let wbg_generic = is_wbg_generic(ns.definition_attributes);
 
         let mut consts = vec![];
+        let mut attributes = vec![];
         let mut functions = vec![];
 
         for member in ns.consts.iter() {
-            self.append_ns_const(&mut consts, member.clone(), unstable);
+            self.append_ns_const(&mut consts, member.clone(), unstable, wbg_generic);
+        }
+
+        for member in ns.attributes.iter() {
+            self.append_ns_attribute(&mut attributes, member, unstable, wbg_generic);
         }
 
         for (id, data) in ns.operations.iter() {
-            self.append_ns_operation(&mut functions, &js_name, id, data);
+            self.append_ns_operation(&mut functions, &js_name, id, data, wbg_generic);
         }
 
-        if !consts.is_empty() || !functions.is_empty() {
+        if !consts.is_empty() || !attributes.is_empty() || !functions.is_empty() {
             Namespace {
                 name,
                 js_name,
                 consts,
+                attributes,
                 functions,
                 unstable,
             }
-            .generate(options)
+            .generate(&self.options)
             .to_tokens(&mut program.tokens);
         }
     }
@@ -520,10 +740,16 @@ impl<'src> FirstPassRecord<'src> {
         consts: &mut Vec<Const>,
         member: first_pass::ConstNamespaceData<'src>,
         unstable: bool,
+        wbg_generic: bool,
     ) {
-        let idl_type = member.definition.const_type.to_idl_type(self);
-        let ty = idl_type
-            .to_syn_type(TypePosition::Return, false)
+        let wbg_type = member.definition.const_type.to_wbg_type(self);
+        let generics_compat = if unstable || wbg_generic {
+            false
+        } else {
+            !self.options.next_unstable.get()
+        };
+        let ty = wbg_type
+            .to_syn_type(TypePosition::RETURN, false, generics_compat)
             .unwrap()
             .unwrap();
 
@@ -546,6 +772,7 @@ impl<'src> FirstPassRecord<'src> {
         js_name: &str,
         id: &'src OperationId<'src>,
         data: &'src OperationData<'src>,
+        wbg_generic: bool,
     ) {
         match id {
             OperationId::Operation(Some(_)) => {}
@@ -555,20 +782,59 @@ impl<'src> FirstPassRecord<'src> {
             | OperationId::IndexingGetter
             | OperationId::IndexingSetter
             | OperationId::IndexingDeleter => {
-                log::warn!("Unsupported unnamed operation: on {:?}", js_name);
+                log::warn!("Unsupported unnamed operation: on {js_name:?}");
                 return;
             }
         }
 
-        for x in self.create_imports(None, None, id, data, false, &HashSet::new()) {
+        for x in self.create_imports(None, None, id, data, false, &HashSet::new(), wbg_generic) {
             functions.push(Function {
                 name: x.name,
                 js_name: x.js_name,
                 arguments: x.arguments,
-                ret_ty: x.ret_ty,
+                variadic_type: x.variadic_type,
+                ret_wbg_ty: x.ret_wbg_ty,
                 catch: x.catch,
                 variadic: x.variadic,
                 unstable: false,
+                wbg_generic,
+            });
+        }
+    }
+
+    fn append_ns_attribute(
+        &self,
+        attributes: &mut Vec<NamespaceAttribute>,
+        member: &first_pass::AttributeNamespaceData<'src>,
+        unstable: bool,
+        wbg_generic: bool,
+    ) {
+        let definition = member.definition;
+        let catch = throws(&definition.attributes);
+        let unstable = unstable || member.stability.is_unstable();
+
+        let generics_compat = if unstable || wbg_generic {
+            false
+        } else {
+            !self.options.next_unstable.get()
+        };
+        let ty = definition
+            .type_
+            .to_wbg_type(self)
+            .to_syn_type(TypePosition::RETURN, false, generics_compat)
+            .unwrap_or(None);
+
+        let js_name = definition.identifier.0.to_string();
+
+        // Generate getter - namespace attributes are always readonly per the WebIDL spec
+        if let Some(ty) = ty {
+            attributes.push(NamespaceAttribute {
+                js_name: js_name.clone(),
+                rust_name: snake_case_ident(&js_name),
+                ty,
+                catch: catch || getter_throws("", &js_name, &definition.attributes),
+                kind: NamespaceAttributeKind::Getter,
+                unstable,
             });
         }
     }
@@ -578,10 +844,16 @@ impl<'src> FirstPassRecord<'src> {
         consts: &mut Vec<Const>,
         member: &'src weedle::interface::ConstMember<'src>,
         unstable: bool,
+        wbg_generic: bool,
     ) {
-        let idl_type = member.const_type.to_idl_type(self);
-        let ty = idl_type
-            .to_syn_type(TypePosition::Return, false)
+        let wbg_type = member.const_type.to_wbg_type(self);
+        let generics_compat = if unstable || wbg_generic {
+            false
+        } else {
+            !self.options.next_unstable.get()
+        };
+        let ty = wbg_type
+            .to_syn_type(TypePosition::RETURN, false, generics_compat)
             .unwrap()
             .unwrap();
 
@@ -600,7 +872,6 @@ impl<'src> FirstPassRecord<'src> {
 
     fn append_interface(
         &self,
-        options: &Options,
         program: &mut Program,
         name: Ident,
         js_name: String,
@@ -608,6 +879,7 @@ impl<'src> FirstPassRecord<'src> {
         data: &InterfaceData<'src>,
     ) {
         let unstable = data.stability.is_unstable();
+        let wbg_generic = is_wbg_generic(data.definition_attributes);
         let has_interface = data.has_interface;
 
         let deprecated = data.deprecated.clone();
@@ -628,7 +900,7 @@ impl<'src> FirstPassRecord<'src> {
         for member in data.consts.iter() {
             let unstable = unstable || member.stability.is_unstable();
             let member = member.definition;
-            self.append_interface_const(&mut consts, member, unstable);
+            self.append_interface_const(&mut consts, member, unstable, wbg_generic);
         }
 
         for member in data.attributes.iter() {
@@ -644,6 +916,7 @@ impl<'src> FirstPassRecord<'src> {
                 data.definition_attributes,
                 &js_name,
                 unstable,
+                wbg_generic,
             );
         }
 
@@ -655,12 +928,13 @@ impl<'src> FirstPassRecord<'src> {
                 id,
                 op_data,
                 unstable_types,
+                wbg_generic,
             );
         }
 
         for mixin_data in self.all_mixins(&js_name) {
             for member in &mixin_data.consts {
-                self.append_interface_const(&mut consts, member, unstable);
+                self.append_interface_const(&mut consts, member, unstable, wbg_generic);
             }
 
             for member in &mixin_data.attributes {
@@ -678,6 +952,7 @@ impl<'src> FirstPassRecord<'src> {
                     data.definition_attributes,
                     &js_name,
                     unstable,
+                    wbg_generic,
                 );
             }
 
@@ -689,22 +964,39 @@ impl<'src> FirstPassRecord<'src> {
                     id,
                     op_data,
                     unstable_types,
+                    wbg_generic,
                 );
             }
         }
 
+        // Mark stable attributes that have unstable overrides with the same name.
+        // This allows unstable APIs to provide corrected type signatures (e.g.,
+        // changing `long` to `double` for MouseEvent.clientX).
+        mark_stable_attributes_with_unstable_overrides(&mut attributes);
+
+        // Mark stable methods that have unstable overrides with the same name.
+        // This allows unstable APIs to provide corrected return types (e.g.,
+        // changing `undefined` to `PerformanceMark` for Performance.mark).
+        mark_stable_methods_with_unstable_overrides(&mut methods);
+
+        // Add custom methods (e.g., maplike/setlike iterators)
+        // Generator will produce both compat and non-compat output
+        for (_, method) in data.custom_methods.iter() {
+            methods.push(method.clone());
+        }
+
         Interface {
-            name,
-            js_name,
-            deprecated,
+            name: name.clone(),
+            js_name: js_name.clone(),
+            deprecated: deprecated.clone(),
             has_interface,
-            parents,
+            parents: parents.clone(),
             consts,
             attributes,
             methods,
             unstable,
         }
-        .generate(options)
+        .generate(&self.options)
         .to_tokens(&mut program.tokens);
     }
 
@@ -719,6 +1011,7 @@ impl<'src> FirstPassRecord<'src> {
         container_attrs: Option<&'src ExtendedAttributeList<'src>>,
         parent_js_name: &str,
         unstable: bool,
+        wbg_generic: bool,
     ) {
         use weedle::interface::StringifierOrInheritOrStatic::*;
 
@@ -734,10 +1027,15 @@ impl<'src> FirstPassRecord<'src> {
         let catch = throws(attrs);
         let deprecated: Option<Option<String>> = get_rust_deprecated(attrs);
 
+        let generics_compat = if unstable || wbg_generic {
+            false
+        } else {
+            !self.options.next_unstable.get()
+        };
         let ty = type_
             .type_
-            .to_idl_type(self)
-            .to_syn_type(TypePosition::Return, false)
+            .to_wbg_type(self)
+            .to_syn_type(TypePosition::RETURN, false, generics_compat)
             .unwrap_or(None);
 
         // Skip types which can't be converted
@@ -753,11 +1051,12 @@ impl<'src> FirstPassRecord<'src> {
                 deprecated: deprecated.clone(),
                 kind,
                 unstable,
+                has_unstable_override: false,
             });
         }
 
         if !readonly {
-            let idls = type_.type_.to_idl_type(self).flatten(attrs.as_ref());
+            let idls = type_.type_.to_wbg_type(self).flatten(attrs.as_ref());
             let any_different_type = idls.len() > 1;
 
             if any_different_type
@@ -768,8 +1067,8 @@ impl<'src> FirstPassRecord<'src> {
             {
                 let ty = type_
                     .type_
-                    .to_idl_type(self)
-                    .to_syn_type(TypePosition::Argument, true)
+                    .to_wbg_type(self)
+                    .to_syn_type(TypePosition::ARGUMENT, true, generics_compat)
                     .unwrap_or(None);
 
                 // Skip types which can't be converted
@@ -784,12 +1083,13 @@ impl<'src> FirstPassRecord<'src> {
                         deprecated: Some(None),
                         kind: InterfaceAttributeKind::Setter,
                         unstable,
+                        has_unstable_override: false,
                     });
                 }
             }
 
             for (idl, ty) in idls.into_iter().filter_map(|idl| {
-                idl.to_syn_type(TypePosition::Argument, false)
+                idl.to_syn_type(TypePosition::ARGUMENT, false, generics_compat)
                     .ok()
                     .flatten()
                     .map(|ty| (idl, ty))
@@ -813,6 +1113,7 @@ impl<'src> FirstPassRecord<'src> {
                     deprecated: deprecated.clone(),
                     kind: InterfaceAttributeKind::Setter,
                     unstable,
+                    has_unstable_override: false,
                 });
             }
         }
@@ -826,6 +1127,7 @@ impl<'src> FirstPassRecord<'src> {
         id: &'src OperationId<'src>,
         op_data: &'src OperationData<'src>,
         unstable_types: &HashSet<Identifier>,
+        wbg_generic: bool,
     ) {
         let attrs = data.definition_attributes;
         let unstable = data.stability.is_unstable();
@@ -837,80 +1139,18 @@ impl<'src> FirstPassRecord<'src> {
             op_data,
             unstable,
             unstable_types,
+            wbg_generic,
         ) {
-            if !methods.iter().any(|old_method| {
-                old_method.variadic == method.variadic
-                    && old_method.js_name == method.js_name
-                    && old_method.variadic_type == method.variadic_type
-                    && old_method
-                        .arguments
-                        .iter()
-                        .map(|(_, idl, wb)| (idl.orig(), wb))
-                        .eq(method.arguments.iter().map(|(_, idl, wb)| (idl.orig(), wb)))
-            }) {
+            // Check if this method would be a duplicate of an existing method.
+            // We allow both stable and unstable versions of the same method signature
+            // since they will be cfg-gated and only one will be active at compile time.
+            let dominated = methods
+                .iter()
+                .any(|old_method| method.same_signature(old_method));
+            if !dominated {
                 methods.push(method);
             }
         }
-    }
-
-    fn append_callback_interface(
-        &self,
-        options: &Options,
-        program: &mut Program,
-        name: Ident,
-        js_name: String,
-        item: &CallbackInterfaceData<'src>,
-    ) {
-        assert_eq!(js_name, item.definition.identifier.0);
-
-        let mut fields = Vec::new();
-
-        for member in item.definition.members.body.iter() {
-            match member {
-                InterfaceMember::Operation(op) => {
-                    let identifier = match op.identifier {
-                        Some(i) => i.0,
-                        None => continue,
-                    };
-                    let pos = TypePosition::Argument;
-
-                    fields.push(DictionaryField {
-                        required: false,
-                        name: snake_case_ident(identifier),
-                        js_name: identifier.to_string(),
-                        ty: idl_type::IdentifierType::Callback
-                            .to_syn_type(pos, false)
-                            .unwrap()
-                            .unwrap(),
-                        return_ty: optional_return_ty(
-                            idl_type::IdentifierType::Callback
-                                .to_syn_type(TypePosition::Return, false)
-                                .unwrap()
-                                .unwrap(),
-                        ),
-                        is_js_value_ref_option_type: false,
-                        unstable: false,
-                        deprecated: get_rust_deprecated(&item.definition.attributes),
-                    })
-                }
-                _ => {
-                    log::warn!(
-                        "skipping callback interface member on {}",
-                        item.definition.identifier.0
-                    );
-                }
-            }
-        }
-
-        Dictionary {
-            name,
-            js_name,
-            fields,
-            unstable: false,
-            deprecated: None,
-        }
-        .generate(options)
-        .to_tokens(&mut program.tokens);
     }
 }
 
@@ -929,7 +1169,7 @@ pub fn generate(from: &Path, to: &Path, options: Options) -> Result<String> {
     let source = read_source_from_path(&from.join("enabled"))?;
     let unstable_source = read_source_from_path(&from.join("unstable"))?;
 
-    let features = parse_webidl(generate_features, source, unstable_source)?;
+    let features = parse_webidl(options, source, unstable_source)?;
 
     if to.exists() {
         fs::remove_dir_all(to).context("Removing features directory")?;
@@ -938,16 +1178,16 @@ pub fn generate(from: &Path, to: &Path, options: Options) -> Result<String> {
     fs::create_dir_all(to).context("Creating features directory")?;
 
     for (name, feature) in features.iter() {
-        let out_file_path = to.join(format!("gen_{}.rs", name));
+        let out_file_path = to.join(format!("gen_{name}.rs"));
 
         fs::write(&out_file_path, &feature.code)?;
     }
 
     let binding_file = features.keys().map(|name| {
         if generate_features {
-            format!("#[cfg(feature = \"{name}\")] #[allow(non_snake_case)] mod gen_{name};\n#[cfg(feature = \"{name}\")] #[allow(unused_imports)] pub use gen_{name}::*;", name = name)
+            format!("#[cfg(feature = \"{name}\")] #[allow(non_snake_case)] mod gen_{name};\n#[cfg(feature = \"{name}\")] #[allow(unused_imports)] pub use gen_{name}::*;")
         } else {
-            format!("#[allow(non_snake_case)] mod gen_{name};\n#[allow(unused_imports)] pub use gen_{name}::*;", name = name)
+            format!("#[allow(non_snake_case)] mod gen_{name};\n#[allow(unused_imports)] pub use gen_{name}::*;")
         }
     }).collect::<Vec<_>>().join("\n\n");
 
@@ -955,7 +1195,7 @@ pub fn generate(from: &Path, to: &Path, options: Options) -> Result<String> {
 
     let to_format = features
         .keys()
-        .map(|name| to.join(format!("gen_{}.rs", name)))
+        .map(|name| to.join(format!("gen_{name}.rs")))
         .chain([to.join("mod.rs")]);
 
     rustfmt(to_format)?;
@@ -967,10 +1207,10 @@ pub fn generate(from: &Path, to: &Path, options: Options) -> Result<String> {
                 let features = feature
                     .required_features
                     .iter()
-                    .map(|x| format!("\"{}\"", x))
+                    .map(|x| format!("\"{x}\""))
                     .collect::<Vec<_>>()
                     .join(", ");
-                format!("{} = [{}]", name, features)
+                format!("{name} = [{features}]")
             })
             .collect::<Vec<_>>()
             .join("\n");
@@ -1017,14 +1257,10 @@ pub fn generate(from: &Path, to: &Path, options: Options) -> Result<String> {
     }
 
     fn parse_webidl(
-        generate_features: bool,
+        options: Options,
         enabled: SourceFile,
         unstable: SourceFile,
     ) -> Result<BTreeMap<String, Feature>> {
-        let options = Options {
-            features: generate_features,
-        };
-
         match compile(&enabled.contents, &unstable.contents, options) {
             Ok(features) => Ok(features),
             Err(e) => {
@@ -1045,5 +1281,93 @@ pub fn generate(from: &Path, to: &Path, options: Options) -> Result<String> {
                 Err(e.context("compiling WebIDL into wasm-bindgen bindings"))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_namespace_attribute() {
+        let webidl = r#"
+            interface Highlight {
+            };
+            
+            interface HighlightRegistry {
+            };
+            
+            namespace CSS {
+                readonly attribute HighlightRegistry highlights;
+            };
+        "#;
+
+        let options = Options {
+            features: false,
+            next_unstable: std::cell::Cell::new(true),
+        };
+        let result = compile(webidl, "", options).unwrap();
+
+        // Check that the css namespace was generated
+        assert!(
+            result.contains_key("css"),
+            "Expected 'css' namespace to be generated"
+        );
+
+        // Check that the generated code contains the highlights getter
+        let css_code = &result["css"].code;
+        assert!(
+            css_code.contains("highlights"),
+            "Expected 'highlights' getter in generated code"
+        );
+        assert!(
+            css_code.contains("getter"),
+            "Expected getter attribute in generated code"
+        );
+        assert!(
+            css_code.contains("static_method_of"),
+            "Expected static_method_of in generated code"
+        );
+        // Check that a namespace type binding is created
+        assert!(
+            css_code.contains("JsNamespaceCss"),
+            "Expected JsNamespaceCss type binding in generated code"
+        );
+    }
+
+    #[test]
+    fn test_namespace_attribute_with_throws() {
+        let webidl = r#"
+            interface SomeType {
+            };
+            
+            namespace MyNamespace {
+                [Throws]
+                readonly attribute SomeType myAttribute;
+            };
+        "#;
+
+        let options = Options {
+            features: false,
+            next_unstable: std::cell::Cell::new(true),
+        };
+        let result = compile(webidl, "", options).unwrap();
+
+        // Check that the namespace was generated
+        assert!(
+            result.contains_key("my_namespace"),
+            "Expected 'my_namespace' namespace to be generated"
+        );
+
+        // Check that the generated code contains the catch attribute for throws
+        let ns_code = &result["my_namespace"].code;
+        assert!(
+            ns_code.contains("my_attribute"),
+            "Expected 'my_attribute' getter in generated code"
+        );
+        assert!(
+            ns_code.contains("catch"),
+            "Expected catch attribute in generated code for [Throws]"
+        );
     }
 }

@@ -12,7 +12,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `WebTransportOptions`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub type WebTransportOptions;
     #[cfg(web_sys_unstable_apis)]
     #[doc = "Get the `allowPooling` field of this object."]
@@ -20,7 +20,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `WebTransportOptions`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "allowPooling")]
     pub fn get_allow_pooling(this: &WebTransportOptions) -> Option<bool>;
     #[cfg(web_sys_unstable_apis)]
@@ -29,7 +29,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `WebTransportOptions`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "allowPooling")]
     pub fn set_allow_pooling(this: &WebTransportOptions, val: bool);
     #[cfg(web_sys_unstable_apis)]
@@ -39,7 +39,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `WebTransportCongestionControl`, `WebTransportOptions`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "congestionControl")]
     pub fn get_congestion_control(
         this: &WebTransportOptions,
@@ -51,7 +51,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `WebTransportCongestionControl`, `WebTransportOptions`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "congestionControl")]
     pub fn set_congestion_control(this: &WebTransportOptions, val: WebTransportCongestionControl);
     #[cfg(web_sys_unstable_apis)]
@@ -60,7 +60,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `WebTransportOptions`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "requireUnreliable")]
     pub fn get_require_unreliable(this: &WebTransportOptions) -> Option<bool>;
     #[cfg(web_sys_unstable_apis)]
@@ -69,27 +69,31 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `WebTransportOptions`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "requireUnreliable")]
     pub fn set_require_unreliable(this: &WebTransportOptions, val: bool);
     #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "WebTransportHash")]
     #[doc = "Get the `serverCertificateHashes` field of this object."]
     #[doc = ""]
-    #[doc = "*This API requires the following crate features to be activated: `WebTransportOptions`*"]
+    #[doc = "*This API requires the following crate features to be activated: `WebTransportHash`, `WebTransportOptions`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "serverCertificateHashes")]
-    pub fn get_server_certificate_hashes(this: &WebTransportOptions) -> Option<::js_sys::Array>;
+    pub fn get_server_certificate_hashes(
+        this: &WebTransportOptions,
+    ) -> Option<::js_sys::Array<WebTransportHash>>;
     #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "WebTransportHash")]
     #[doc = "Change the `serverCertificateHashes` field of this object."]
     #[doc = ""]
-    #[doc = "*This API requires the following crate features to be activated: `WebTransportOptions`*"]
+    #[doc = "*This API requires the following crate features to be activated: `WebTransportHash`, `WebTransportOptions`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "serverCertificateHashes")]
-    pub fn set_server_certificate_hashes(this: &WebTransportOptions, val: &::wasm_bindgen::JsValue);
+    pub fn set_server_certificate_hashes(this: &WebTransportOptions, val: &[WebTransportHash]);
 }
 #[cfg(web_sys_unstable_apis)]
 impl WebTransportOptions {
@@ -98,7 +102,7 @@ impl WebTransportOptions {
     #[doc = "*This API requires the following crate features to be activated: `WebTransportOptions`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn new() -> Self {
         #[allow(unused_mut)]
         let mut ret: Self = ::wasm_bindgen::JsCast::unchecked_into(::js_sys::Object::new());
@@ -124,8 +128,9 @@ impl WebTransportOptions {
         self
     }
     #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "WebTransportHash")]
     #[deprecated = "Use `set_server_certificate_hashes()` instead."]
-    pub fn server_certificate_hashes(&mut self, val: &::wasm_bindgen::JsValue) -> &mut Self {
+    pub fn server_certificate_hashes(&mut self, val: &[WebTransportHash]) -> &mut Self {
         self.set_server_certificate_hashes(val);
         self
     }

@@ -14,7 +14,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `BluetoothManufacturerDataMap`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub type BluetoothManufacturerDataMap;
     #[cfg(web_sys_unstable_apis)]
     # [wasm_bindgen (structural , method , getter , js_class = "BluetoothManufacturerDataMap" , js_name = size)]
@@ -25,19 +25,8 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `BluetoothManufacturerDataMap`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn size(this: &BluetoothManufacturerDataMap) -> u32;
-    #[cfg(web_sys_unstable_apis)]
-    # [wasm_bindgen (method , structural , js_class = "BluetoothManufacturerDataMap" , js_name = entries)]
-    #[doc = "The `entries()` method."]
-    #[doc = ""]
-    #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/BluetoothManufacturerDataMap/entries)"]
-    #[doc = ""]
-    #[doc = "*This API requires the following crate features to be activated: `BluetoothManufacturerDataMap`*"]
-    #[doc = ""]
-    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
-    pub fn entries(this: &BluetoothManufacturerDataMap) -> ::js_sys::Iterator;
     #[cfg(web_sys_unstable_apis)]
     # [wasm_bindgen (catch , method , structural , js_class = "BluetoothManufacturerDataMap" , js_name = forEach)]
     #[doc = "The `forEach()` method."]
@@ -47,10 +36,12 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `BluetoothManufacturerDataMap`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn for_each(
         this: &BluetoothManufacturerDataMap,
-        callback: &::js_sys::Function,
+        callback: &::js_sys::Function<
+            fn(::js_sys::DataView, ::js_sys::Number) -> ::js_sys::Undefined,
+        >,
     ) -> Result<(), JsValue>;
     #[cfg(web_sys_unstable_apis)]
     # [wasm_bindgen (method , structural , js_class = "BluetoothManufacturerDataMap" , js_name = get)]
@@ -61,7 +52,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `BluetoothManufacturerDataMap`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn get(this: &BluetoothManufacturerDataMap, key: u16) -> Option<::js_sys::DataView>;
     #[cfg(web_sys_unstable_apis)]
     # [wasm_bindgen (method , structural , js_class = "BluetoothManufacturerDataMap" , js_name = has)]
@@ -72,8 +63,21 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `BluetoothManufacturerDataMap`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn has(this: &BluetoothManufacturerDataMap, key: u16) -> bool;
+    #[cfg(web_sys_unstable_apis)]
+    # [wasm_bindgen (method , structural , js_class = "BluetoothManufacturerDataMap" , js_name = entries)]
+    #[doc = "The `entries()` method."]
+    #[doc = ""]
+    #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/BluetoothManufacturerDataMap/entries)"]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `BluetoothManufacturerDataMap`*"]
+    #[doc = ""]
+    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub fn entries(
+        this: &BluetoothManufacturerDataMap,
+    ) -> ::js_sys::Iterator<::js_sys::ArrayTuple<(::js_sys::Number, ::js_sys::DataView)>>;
     #[cfg(web_sys_unstable_apis)]
     # [wasm_bindgen (method , structural , js_class = "BluetoothManufacturerDataMap" , js_name = keys)]
     #[doc = "The `keys()` method."]
@@ -83,8 +87,8 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `BluetoothManufacturerDataMap`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
-    pub fn keys(this: &BluetoothManufacturerDataMap) -> ::js_sys::Iterator;
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub fn keys(this: &BluetoothManufacturerDataMap) -> ::js_sys::Iterator<::js_sys::Number>;
     #[cfg(web_sys_unstable_apis)]
     # [wasm_bindgen (method , structural , js_class = "BluetoothManufacturerDataMap" , js_name = values)]
     #[doc = "The `values()` method."]
@@ -94,6 +98,6 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `BluetoothManufacturerDataMap`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
-    pub fn values(this: &BluetoothManufacturerDataMap) -> ::js_sys::Iterator;
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub fn values(this: &BluetoothManufacturerDataMap) -> ::js_sys::Iterator<::js_sys::DataView>;
 }

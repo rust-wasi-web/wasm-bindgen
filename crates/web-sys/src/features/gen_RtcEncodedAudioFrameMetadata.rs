@@ -12,7 +12,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `RtcEncodedAudioFrameMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub type RtcEncodedAudioFrameMetadata;
     #[cfg(web_sys_unstable_apis)]
     #[doc = "Get the `contributingSources` field of this object."]
@@ -20,29 +20,27 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `RtcEncodedAudioFrameMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "contributingSources")]
-    pub fn get_contributing_sources(this: &RtcEncodedAudioFrameMetadata)
-        -> Option<::js_sys::Array>;
+    pub fn get_contributing_sources(
+        this: &RtcEncodedAudioFrameMetadata,
+    ) -> Option<::js_sys::Array<::js_sys::Number>>;
     #[cfg(web_sys_unstable_apis)]
     #[doc = "Change the `contributingSources` field of this object."]
     #[doc = ""]
     #[doc = "*This API requires the following crate features to be activated: `RtcEncodedAudioFrameMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "contributingSources")]
-    pub fn set_contributing_sources(
-        this: &RtcEncodedAudioFrameMetadata,
-        val: &::wasm_bindgen::JsValue,
-    );
+    pub fn set_contributing_sources(this: &RtcEncodedAudioFrameMetadata, val: &[::js_sys::Number]);
     #[cfg(web_sys_unstable_apis)]
     #[doc = "Get the `mimeType` field of this object."]
     #[doc = ""]
     #[doc = "*This API requires the following crate features to be activated: `RtcEncodedAudioFrameMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "mimeType")]
     pub fn get_mime_type(this: &RtcEncodedAudioFrameMetadata) -> Option<::alloc::string::String>;
     #[cfg(web_sys_unstable_apis)]
@@ -51,7 +49,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `RtcEncodedAudioFrameMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "mimeType")]
     pub fn set_mime_type(this: &RtcEncodedAudioFrameMetadata, val: &str);
     #[cfg(web_sys_unstable_apis)]
@@ -60,7 +58,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `RtcEncodedAudioFrameMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "payloadType")]
     pub fn get_payload_type(this: &RtcEncodedAudioFrameMetadata) -> Option<u8>;
     #[cfg(web_sys_unstable_apis)]
@@ -69,7 +67,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `RtcEncodedAudioFrameMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "payloadType")]
     pub fn set_payload_type(this: &RtcEncodedAudioFrameMetadata, val: u8);
     #[cfg(web_sys_unstable_apis)]
@@ -78,7 +76,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `RtcEncodedAudioFrameMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "rtpTimestamp")]
     pub fn get_rtp_timestamp(this: &RtcEncodedAudioFrameMetadata) -> Option<u32>;
     #[cfg(web_sys_unstable_apis)]
@@ -87,7 +85,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `RtcEncodedAudioFrameMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "rtpTimestamp")]
     pub fn set_rtp_timestamp(this: &RtcEncodedAudioFrameMetadata, val: u32);
     #[cfg(web_sys_unstable_apis)]
@@ -96,7 +94,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `RtcEncodedAudioFrameMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "sequenceNumber")]
     pub fn get_sequence_number(this: &RtcEncodedAudioFrameMetadata) -> Option<i16>;
     #[cfg(web_sys_unstable_apis)]
@@ -105,7 +103,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `RtcEncodedAudioFrameMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "sequenceNumber")]
     pub fn set_sequence_number(this: &RtcEncodedAudioFrameMetadata, val: i16);
     #[cfg(web_sys_unstable_apis)]
@@ -114,7 +112,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `RtcEncodedAudioFrameMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "synchronizationSource")]
     pub fn get_synchronization_source(this: &RtcEncodedAudioFrameMetadata) -> Option<u32>;
     #[cfg(web_sys_unstable_apis)]
@@ -123,7 +121,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `RtcEncodedAudioFrameMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "synchronizationSource")]
     pub fn set_synchronization_source(this: &RtcEncodedAudioFrameMetadata, val: u32);
 }
@@ -134,7 +132,7 @@ impl RtcEncodedAudioFrameMetadata {
     #[doc = "*This API requires the following crate features to be activated: `RtcEncodedAudioFrameMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn new() -> Self {
         #[allow(unused_mut)]
         let mut ret: Self = ::wasm_bindgen::JsCast::unchecked_into(::js_sys::Object::new());
@@ -142,7 +140,7 @@ impl RtcEncodedAudioFrameMetadata {
     }
     #[cfg(web_sys_unstable_apis)]
     #[deprecated = "Use `set_contributing_sources()` instead."]
-    pub fn contributing_sources(&mut self, val: &::wasm_bindgen::JsValue) -> &mut Self {
+    pub fn contributing_sources(&mut self, val: &[::js_sys::Number]) -> &mut Self {
         self.set_contributing_sources(val);
         self
     }

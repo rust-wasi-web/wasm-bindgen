@@ -13,7 +13,7 @@ pub struct ConsumeRetString;
 
 #[wasm_bindgen]
 impl ConsumeRetString {
-    // https://github.com/rustwasm/wasm-bindgen/issues/329#issuecomment-411082013
+    // https://github.com/wasm-bindgen/wasm-bindgen/issues/329#issuecomment-411082013
     //
     // This used to cause two `const ptr = ...` declarations, which is invalid
     // JS.
@@ -54,8 +54,8 @@ pub mod strings;
 
 #[wasm_bindgen_test]
 fn closures_work() {
-    let x = Closure::wrap(Box::new(|| {}) as Box<dyn FnMut()>);
+    let x: Closure<dyn FnMut()> = Closure::wrap(Box::new(|| {}));
     drop(x);
-    let x = Closure::wrap(Box::new(|| {}) as Box<dyn FnMut()>);
+    let x: Closure<dyn FnMut()> = Closure::wrap(Box::new(|| {}));
     x.forget();
 }

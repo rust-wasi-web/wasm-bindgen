@@ -14,7 +14,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `Gpu`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub type Gpu;
     #[cfg(web_sys_unstable_apis)]
     #[cfg(feature = "WgslLanguageFeatures")]
@@ -26,7 +26,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `Gpu`, `WgslLanguageFeatures`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn wgsl_language_features(this: &Gpu) -> WgslLanguageFeatures;
     #[cfg(web_sys_unstable_apis)]
     #[cfg(feature = "GpuTextureFormat")]
@@ -38,32 +38,33 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `Gpu`, `GpuTextureFormat`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn get_preferred_canvas_format(this: &Gpu) -> GpuTextureFormat;
     #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "GpuAdapter")]
     # [wasm_bindgen (method , structural , js_class = "GPU" , js_name = requestAdapter)]
     #[doc = "The `requestAdapter()` method."]
     #[doc = ""]
     #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/GPU/requestAdapter)"]
     #[doc = ""]
-    #[doc = "*This API requires the following crate features to be activated: `Gpu`*"]
+    #[doc = "*This API requires the following crate features to be activated: `Gpu`, `GpuAdapter`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
-    pub fn request_adapter(this: &Gpu) -> ::js_sys::Promise;
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub fn request_adapter(this: &Gpu) -> ::js_sys::Promise<::js_sys::JsOption<GpuAdapter>>;
     #[cfg(web_sys_unstable_apis)]
-    #[cfg(feature = "GpuRequestAdapterOptions")]
+    #[cfg(all(feature = "GpuAdapter", feature = "GpuRequestAdapterOptions",))]
     # [wasm_bindgen (method , structural , js_class = "GPU" , js_name = requestAdapter)]
     #[doc = "The `requestAdapter()` method."]
     #[doc = ""]
     #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/GPU/requestAdapter)"]
     #[doc = ""]
-    #[doc = "*This API requires the following crate features to be activated: `Gpu`, `GpuRequestAdapterOptions`*"]
+    #[doc = "*This API requires the following crate features to be activated: `Gpu`, `GpuAdapter`, `GpuRequestAdapterOptions`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn request_adapter_with_options(
         this: &Gpu,
         options: &GpuRequestAdapterOptions,
-    ) -> ::js_sys::Promise;
+    ) -> ::js_sys::Promise<::js_sys::JsOption<GpuAdapter>>;
 }

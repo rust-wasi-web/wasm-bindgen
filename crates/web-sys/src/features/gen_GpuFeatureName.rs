@@ -8,9 +8,10 @@ use wasm_bindgen::prelude::*;
 #[doc = "*This API requires the following crate features to be activated: `GpuFeatureName`*"]
 #[doc = ""]
 #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-#[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+#[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GpuFeatureName {
+    CoreFeaturesAndLimits = "core-features-and-limits",
     DepthClipControl = "depth-clip-control",
     Depth32floatStencil8 = "depth32float-stencil8",
     TextureCompressionBc = "texture-compression-bc",
@@ -27,4 +28,9 @@ pub enum GpuFeatureName {
     Float32Blendable = "float32-blendable",
     ClipDistances = "clip-distances",
     DualSourceBlending = "dual-source-blending",
+    Subgroups = "subgroups",
+    TextureFormatsTier1 = "texture-formats-tier1",
+    TextureFormatsTier2 = "texture-formats-tier2",
+    PrimitiveIndex = "primitive-index",
+    TextureComponentSwizzle = "texture-component-swizzle",
 }

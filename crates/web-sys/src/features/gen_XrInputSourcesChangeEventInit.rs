@@ -12,7 +12,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `XrInputSourcesChangeEventInit`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub type XrInputSourcesChangeEventInit;
     #[cfg(web_sys_unstable_apis)]
     #[doc = "Get the `bubbles` field of this object."]
@@ -20,7 +20,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `XrInputSourcesChangeEventInit`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "bubbles")]
     pub fn get_bubbles(this: &XrInputSourcesChangeEventInit) -> Option<bool>;
     #[cfg(web_sys_unstable_apis)]
@@ -29,7 +29,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `XrInputSourcesChangeEventInit`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "bubbles")]
     pub fn set_bubbles(this: &XrInputSourcesChangeEventInit, val: bool);
     #[cfg(web_sys_unstable_apis)]
@@ -38,7 +38,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `XrInputSourcesChangeEventInit`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "cancelable")]
     pub fn get_cancelable(this: &XrInputSourcesChangeEventInit) -> Option<bool>;
     #[cfg(web_sys_unstable_apis)]
@@ -47,7 +47,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `XrInputSourcesChangeEventInit`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "cancelable")]
     pub fn set_cancelable(this: &XrInputSourcesChangeEventInit, val: bool);
     #[cfg(web_sys_unstable_apis)]
@@ -56,7 +56,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `XrInputSourcesChangeEventInit`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "composed")]
     pub fn get_composed(this: &XrInputSourcesChangeEventInit) -> Option<bool>;
     #[cfg(web_sys_unstable_apis)]
@@ -65,45 +65,49 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `XrInputSourcesChangeEventInit`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "composed")]
     pub fn set_composed(this: &XrInputSourcesChangeEventInit, val: bool);
     #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "XrInputSource")]
     #[doc = "Get the `added` field of this object."]
     #[doc = ""]
-    #[doc = "*This API requires the following crate features to be activated: `XrInputSourcesChangeEventInit`*"]
+    #[doc = "*This API requires the following crate features to be activated: `XrInputSource`, `XrInputSourcesChangeEventInit`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "added")]
-    pub fn get_added(this: &XrInputSourcesChangeEventInit) -> ::js_sys::Array;
+    pub fn get_added(this: &XrInputSourcesChangeEventInit) -> ::js_sys::Array<XrInputSource>;
     #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "XrInputSource")]
     #[doc = "Change the `added` field of this object."]
     #[doc = ""]
-    #[doc = "*This API requires the following crate features to be activated: `XrInputSourcesChangeEventInit`*"]
+    #[doc = "*This API requires the following crate features to be activated: `XrInputSource`, `XrInputSourcesChangeEventInit`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "added")]
-    pub fn set_added(this: &XrInputSourcesChangeEventInit, val: &::wasm_bindgen::JsValue);
+    pub fn set_added(this: &XrInputSourcesChangeEventInit, val: &[XrInputSource]);
     #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "XrInputSource")]
     #[doc = "Get the `removed` field of this object."]
     #[doc = ""]
-    #[doc = "*This API requires the following crate features to be activated: `XrInputSourcesChangeEventInit`*"]
+    #[doc = "*This API requires the following crate features to be activated: `XrInputSource`, `XrInputSourcesChangeEventInit`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "removed")]
-    pub fn get_removed(this: &XrInputSourcesChangeEventInit) -> ::js_sys::Array;
+    pub fn get_removed(this: &XrInputSourcesChangeEventInit) -> ::js_sys::Array<XrInputSource>;
     #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "XrInputSource")]
     #[doc = "Change the `removed` field of this object."]
     #[doc = ""]
-    #[doc = "*This API requires the following crate features to be activated: `XrInputSourcesChangeEventInit`*"]
+    #[doc = "*This API requires the following crate features to be activated: `XrInputSource`, `XrInputSourcesChangeEventInit`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "removed")]
-    pub fn set_removed(this: &XrInputSourcesChangeEventInit, val: &::wasm_bindgen::JsValue);
+    pub fn set_removed(this: &XrInputSourcesChangeEventInit, val: &[XrInputSource]);
     #[cfg(web_sys_unstable_apis)]
     #[cfg(feature = "XrSession")]
     #[doc = "Get the `session` field of this object."]
@@ -111,7 +115,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `XrInputSourcesChangeEventInit`, `XrSession`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "session")]
     pub fn get_session(this: &XrInputSourcesChangeEventInit) -> XrSession;
     #[cfg(web_sys_unstable_apis)]
@@ -121,24 +125,20 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `XrInputSourcesChangeEventInit`, `XrSession`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "session")]
     pub fn set_session(this: &XrInputSourcesChangeEventInit, val: &XrSession);
 }
 #[cfg(web_sys_unstable_apis)]
 impl XrInputSourcesChangeEventInit {
-    #[cfg(feature = "XrSession")]
+    #[cfg(all(feature = "XrInputSource", feature = "XrSession",))]
     #[doc = "Construct a new `XrInputSourcesChangeEventInit`."]
     #[doc = ""]
-    #[doc = "*This API requires the following crate features to be activated: `XrInputSourcesChangeEventInit`, `XrSession`*"]
+    #[doc = "*This API requires the following crate features to be activated: `XrInputSource`, `XrInputSourcesChangeEventInit`, `XrSession`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
-    pub fn new(
-        added: &::wasm_bindgen::JsValue,
-        removed: &::wasm_bindgen::JsValue,
-        session: &XrSession,
-    ) -> Self {
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub fn new(added: &[XrInputSource], removed: &[XrInputSource], session: &XrSession) -> Self {
         #[allow(unused_mut)]
         let mut ret: Self = ::wasm_bindgen::JsCast::unchecked_into(::js_sys::Object::new());
         ret.set_added(added);
@@ -165,14 +165,16 @@ impl XrInputSourcesChangeEventInit {
         self
     }
     #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "XrInputSource")]
     #[deprecated = "Use `set_added()` instead."]
-    pub fn added(&mut self, val: &::wasm_bindgen::JsValue) -> &mut Self {
+    pub fn added(&mut self, val: &[XrInputSource]) -> &mut Self {
         self.set_added(val);
         self
     }
     #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "XrInputSource")]
     #[deprecated = "Use `set_removed()` instead."]
-    pub fn removed(&mut self, val: &::wasm_bindgen::JsValue) -> &mut Self {
+    pub fn removed(&mut self, val: &[XrInputSource]) -> &mut Self {
         self.set_removed(val);
         self
     }

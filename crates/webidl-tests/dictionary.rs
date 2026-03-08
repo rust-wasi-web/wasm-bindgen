@@ -67,14 +67,26 @@ fn many_types() {
 
 #[wasm_bindgen_test]
 fn required() {
-    let required = Required::new(3, "a");
-    required.set_c(4);
-    assert_dict_required(&required);
+    let dict = Required::new(3, "a");
+    dict.set_c(4);
+    assert_dict_required(&dict);
 }
 
 #[wasm_bindgen_test]
 fn correct_casing_in_js() {
-    let preserve_names = PreserveNames::new();
-    preserve_names.set_weird_field_name(1);
-    assert_camel_case(&preserve_names);
+    let dict = PreserveNames::new();
+    dict.set_weird_field_name(1);
+    assert_camel_case(&dict);
+}
+
+#[wasm_bindgen_test]
+fn nullable_sequence_field() {
+    // Regression test: nullable sequence dictionary fields should compile.
+    // The builder pattern previously broke due to is_js_value_ref_option_type
+    // type mismatch between the setter and the unwrap_or call.
+    let dict = DictWithNullableSequence::new();
+    #[cfg(not(wbg_next_unstable))]
+    dict.set_nullable_sequence(&JsValue::NULL);
+    #[cfg(wbg_next_unstable)]
+    dict.set_nullable_sequence(None);
 }

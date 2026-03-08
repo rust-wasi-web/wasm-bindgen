@@ -1,7 +1,7 @@
 use crate::intrinsic::Intrinsic;
 use crate::wit::AdapterId;
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use walrus::TypedCustomSectionId;
 
@@ -13,7 +13,7 @@ use walrus::TypedCustomSectionId;
 pub struct WasmBindgenAux {
     /// Extra typescript annotations that should be appended to the generated
     /// TypeScript file. This is provided via a custom attribute in Rust code.
-    pub extra_typescript: String,
+    pub extra_typescript: Vec<String>,
 
     /// A map from identifier to the contents of each local module defined via
     /// the `#[wasm_bindgen(module = "/foo.js")]` import options.
@@ -21,7 +21,7 @@ pub struct WasmBindgenAux {
 
     /// A map from unique crate identifier to the list of inline JS snippets for
     /// that crate identifier.
-    pub snippets: HashMap<String, Vec<String>>,
+    pub snippets: BTreeMap<String, Vec<String>>,
 
     /// A list of all `package.json` files that are intended to be included in
     /// the final build.
@@ -33,6 +33,9 @@ pub struct WasmBindgenAux {
 
     /// A map from imported function id to what it's expected to import.
     pub import_map: HashMap<AdapterId, AuxImport>,
+
+    /// List of imports that should be re-exported, keyed by reexport name.
+    pub reexports: BTreeMap<String, JsImport>,
 
     /// Small bits of metadata about imports.
     pub imports_with_catch: HashSet<AdapterId>,
@@ -60,8 +63,19 @@ pub struct WasmBindgenAux {
 
     /// Various intrinsics used for JS glue generation
     pub exn_store: Option<walrus::FunctionId>,
+    pub destroy_closure: Option<walrus::FunctionId>,
     pub stack_pointer: Option<walrus::GlobalId>,
     pub thread_destroy: Option<walrus::FunctionId>,
+
+    /// The imported JSTag for catching JavaScript exceptions in Wasm.
+    /// When this is `Some`, all imports with `catch` use Wasm catch wrappers
+    /// instead of JS `handleError` wrappers.
+    pub js_tag: Option<walrus::TagId>,
+
+    /// The imported wrapped JSTag for abort-reinit mode.
+    /// This is a custom WebAssembly.Tag used to wrap exceptions so they can be
+    /// distinguished from other JS exceptions.
+    pub wrapped_js_tag: Option<walrus::TagId>,
 }
 
 pub type WasmBindgenAuxId = TypedCustomSectionId<WasmBindgenAux>;
@@ -80,6 +94,8 @@ pub struct AuxExport {
     pub asyncness: bool,
     /// What kind of function this is and where it shows up
     pub kind: AuxExportKind,
+    /// The namespace to export the item through, if any
+    pub js_namespace: Option<Vec<String>>,
     /// Whether typescript bindings should be generated for this export.
     pub generate_typescript: bool,
     /// Whether jsdoc comments should be generated for this export.
@@ -99,6 +115,8 @@ pub struct AuxFunctionArgumentData {
     pub name: String,
     /// Specifies the function argument type override
     pub ty_override: Option<String>,
+    /// Specifies whether the parameter is optional
+    pub optional: bool,
     /// Specifies the argument description
     pub desc: Option<String>,
 }
@@ -123,6 +141,9 @@ pub struct AuxFunctionArgumentData {
 pub enum AuxExportKind {
     /// A free function that's just listed on the exported module
     Function(String),
+
+    /// A free function that receives JS `this` as its first parameter
+    FunctionThis(String),
 
     /// A function that's used to create an instance of a class. The function
     /// actually return just an integer which is put on an JS object currently.
@@ -188,6 +209,10 @@ pub struct AuxEnum {
     pub variants: Vec<(String, i64, String)>,
     /// Whether typescript bindings should be generated for this enum.
     pub generate_typescript: bool,
+    /// Whether to not export this enum from the module exports
+    pub private: bool,
+    /// The namespace to export the enum through, if any
+    pub js_namespace: Option<Vec<String>>,
 }
 
 #[derive(Debug)]
@@ -200,18 +225,31 @@ pub struct AuxStringEnum {
     pub variant_values: Vec<String>,
     /// Whether typescript bindings should be generated for this enum.
     pub generate_typescript: bool,
+    /// The namespace to export the enum through, if any
+    /// Note: Currently unused as string enums don't generate exports,
+    /// but kept for consistency and potential future use.
+    #[allow(dead_code)]
+    pub js_namespace: Option<Vec<String>>,
 }
 
 #[derive(Debug)]
 pub struct AuxStruct {
-    /// The name of this struct
+    /// The JS name of this struct (used for JS output)
     pub name: String,
+    /// The Rust name of this struct (used as internal key, matches js_class on exports)
+    pub rust_name: String,
+    /// The namespace-qualified name (used for wasm symbol generation)
+    pub qualified_name: String,
     /// The copied Rust comments to forward to JS
     pub comments: String,
     /// Whether to generate helper methods for inspecting the class
     pub is_inspectable: bool,
     /// Whether typescript bindings should be generated for this struct.
     pub generate_typescript: bool,
+    /// Whether to not export this struct from the module exports
+    pub private: bool,
+    /// The namespace to export the struct through, if any
+    pub js_namespace: Option<Vec<String>>,
 }
 
 /// All possible types of imports that can be imported by a Wasm module.
@@ -224,6 +262,7 @@ pub struct AuxStruct {
 /// Note that this is *not* the same as the webidl bindings section. This is
 /// intended to be coupled with that to map out what actually gets hooked up to
 /// an import in the Wasm module. The two work in tandem.
+/// Represents the source of a re-export.
 ///
 /// Some of these items here are native to JS (like `Value`, indexing
 /// operations, etc). Others are shims generated by wasm-bindgen (like `Closure`
@@ -253,16 +292,8 @@ pub enum AuxImport {
     /// This import is expected to be a shim that returns an exported `JsString`.
     String(String),
 
-    /// This import is intended to manufacture a JS closure with the given
-    /// signature and then return that back to Rust.
-    Closure {
-        /// whether or not this was a `FnMut` closure
-        mutable: bool,
-        /// table element index of the destructor function
-        dtor: u32,
-        /// the adapter which translates the types for this closure
-        adapter: AdapterId,
-    },
+    /// This import is a generic cast function, monomorphised for a specific `fn(A) -> R` signature.
+    Cast { sig_comment: String },
 
     /// This import is expected to be a shim that simply calls the `foo` method
     /// on the first object, passing along all other parameters and returning
@@ -445,7 +476,7 @@ impl walrus::CustomSection for WasmBindgenAux {
         "wasm-bindgen custom section"
     }
 
-    fn data(&self, _: &walrus::IdsToIndices) -> Cow<[u8]> {
+    fn data(&self, _: &walrus::IdsToIndices) -> Cow<'_, [u8]> {
         panic!("shouldn't emit custom sections just yet");
     }
 
@@ -465,11 +496,17 @@ impl walrus::CustomSection for WasmBindgenAux {
         if let Some(id) = self.exn_store {
             roots.push_func(id);
         }
+        if let Some(id) = self.destroy_closure {
+            roots.push_func(id);
+        }
         if let Some(id) = self.stack_pointer {
             roots.push_global(id);
         }
         if let Some(id) = self.thread_destroy {
             roots.push_func(id);
+        }
+        if let Some(id) = self.js_tag {
+            roots.push_tag(id);
         }
     }
 }

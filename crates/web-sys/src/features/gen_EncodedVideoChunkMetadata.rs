@@ -12,7 +12,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `EncodedVideoChunkMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub type EncodedVideoChunkMetadata;
     #[cfg(web_sys_unstable_apis)]
     #[doc = "Get the `alphaSideData` field of this object."]
@@ -20,7 +20,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `EncodedVideoChunkMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "alphaSideData")]
     pub fn get_alpha_side_data(this: &EncodedVideoChunkMetadata) -> Option<::js_sys::Object>;
     #[cfg(web_sys_unstable_apis)]
@@ -29,9 +29,30 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `EncodedVideoChunkMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "alphaSideData")]
     pub fn set_alpha_side_data(this: &EncodedVideoChunkMetadata, val: &::js_sys::Object);
+    #[cfg(web_sys_unstable_apis)]
+    #[doc = "Change the `alphaSideData` field of this object."]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `EncodedVideoChunkMetadata`*"]
+    #[doc = ""]
+    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[wasm_bindgen(method, setter = "alphaSideData")]
+    pub fn set_alpha_side_data_u8_slice(this: &EncodedVideoChunkMetadata, val: &mut [u8]);
+    #[cfg(web_sys_unstable_apis)]
+    #[doc = "Change the `alphaSideData` field of this object."]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `EncodedVideoChunkMetadata`*"]
+    #[doc = ""]
+    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[wasm_bindgen(method, setter = "alphaSideData")]
+    pub fn set_alpha_side_data_u8_array(
+        this: &EncodedVideoChunkMetadata,
+        val: &::js_sys::Uint8Array,
+    );
     #[cfg(web_sys_unstable_apis)]
     #[cfg(feature = "VideoDecoderConfig")]
     #[doc = "Get the `decoderConfig` field of this object."]
@@ -39,7 +60,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `EncodedVideoChunkMetadata`, `VideoDecoderConfig`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "decoderConfig")]
     pub fn get_decoder_config(this: &EncodedVideoChunkMetadata) -> Option<VideoDecoderConfig>;
     #[cfg(web_sys_unstable_apis)]
@@ -49,7 +70,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `EncodedVideoChunkMetadata`, `VideoDecoderConfig`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "decoderConfig")]
     pub fn set_decoder_config(this: &EncodedVideoChunkMetadata, val: &VideoDecoderConfig);
     #[cfg(web_sys_unstable_apis)]
@@ -59,7 +80,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `EncodedVideoChunkMetadata`, `SvcOutputMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, getter = "svc")]
     pub fn get_svc(this: &EncodedVideoChunkMetadata) -> Option<SvcOutputMetadata>;
     #[cfg(web_sys_unstable_apis)]
@@ -69,7 +90,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `EncodedVideoChunkMetadata`, `SvcOutputMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     #[wasm_bindgen(method, setter = "svc")]
     pub fn set_svc(this: &EncodedVideoChunkMetadata, val: &SvcOutputMetadata);
 }
@@ -80,7 +101,7 @@ impl EncodedVideoChunkMetadata {
     #[doc = "*This API requires the following crate features to be activated: `EncodedVideoChunkMetadata`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn new() -> Self {
         #[allow(unused_mut)]
         let mut ret: Self = ::wasm_bindgen::JsCast::unchecked_into(::js_sys::Object::new());

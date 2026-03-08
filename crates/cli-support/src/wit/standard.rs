@@ -1,8 +1,7 @@
 use crate::descriptor::VectorKind;
-use crate::wit::{AuxImport, WasmBindgenAux};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
-use walrus::{FunctionId, ImportId, RefType, TypedCustomSectionId};
+use walrus::{ExportId, FunctionId, ImportId, RefType, TypedCustomSectionId};
 
 #[derive(Default, Debug)]
 pub struct NonstandardWitSection {
@@ -17,7 +16,7 @@ pub struct NonstandardWitSection {
     pub implements: Vec<(ImportId, FunctionId, AdapterId)>,
 
     /// A list of adapter functions and the names they're exported under.
-    pub exports: Vec<(String, AdapterId)>,
+    pub exports: Vec<(ExportId, AdapterId)>,
 }
 
 pub type NonstandardWitSectionId = TypedCustomSectionId<NonstandardWitSection>;
@@ -97,10 +96,22 @@ pub enum AdapterType {
     NonNull,
 }
 
+/// Describes how a closure's lifetime is managed.
+#[derive(Debug, Clone)]
+pub enum ClosureDtor {
+    /// Persistent/owned closure with a destructor function that will be called
+    /// when the closure is dropped on the JS side.
+    OwnClosure,
+    /// Borrowed closure called from JS (e.g., `forEach` callback). The closure
+    /// is invalidated after the JS call returns by calling `_wbg_cb_unref`.
+    Immediate,
+    /// Borrowed closure (`ScopedClosure`) passed to a Rust async import. The closure's lifetime
+    /// is tied to the async call and cleanup is handled on the Rust side.
+    Borrowed,
+}
+
 #[derive(Debug, Clone)]
 pub enum Instruction {
-    /// Calls a function by its id.
-    CallCore(walrus::FunctionId),
     /// Call the deallocation function.
     DeferFree {
         free: walrus::FunctionId,
@@ -111,8 +122,6 @@ pub enum Instruction {
     CallAdapter(AdapterId),
     /// Call an exported function in the core module
     CallExport(walrus::ExportId),
-    /// Call an element in the function table of the core module
-    CallTableElement(u32),
 
     /// Gets an argument by its index.
     ArgGet(u32),
@@ -332,10 +341,11 @@ pub enum Instruction {
     /// pops i32, loads externref from externref table
     TableGet,
     /// pops two i32 data pointers, pushes an externref closure
-    StackClosure {
+    Closure {
         adapter: AdapterId,
         nargs: usize,
         mutable: bool,
+        dtor: ClosureDtor,
     },
     /// pops two i32 data pointers, pushes a vector view
     View {
@@ -373,7 +383,7 @@ impl AdapterType {
             walrus::ValType::I64 => AdapterType::I64,
             walrus::ValType::F32 => AdapterType::F32,
             walrus::ValType::F64 => AdapterType::F64,
-            walrus::ValType::Ref(RefType::Externref) => AdapterType::Externref,
+            walrus::ValType::Ref(RefType::EXTERNREF) => AdapterType::Externref,
             walrus::ValType::Ref(_) | walrus::ValType::V128 => return None,
         })
     }
@@ -386,7 +396,7 @@ impl AdapterType {
             AdapterType::F64 => walrus::ValType::F64,
             AdapterType::Enum(_) => walrus::ValType::I32,
             AdapterType::Externref | AdapterType::NamedExternref(_) => {
-                walrus::ValType::Ref(RefType::Externref)
+                walrus::ValType::Ref(RefType::EXTERNREF)
             }
             _ => return None,
         })
@@ -424,7 +434,7 @@ impl NonstandardWitSection {
     ///
     /// Returns `true` if any adapters were deleted, or `false` if the adapters
     /// did not change.
-    pub fn gc(&mut self, aux: &WasmBindgenAux) -> bool {
+    pub fn gc(&mut self) -> bool {
         // Populate the live set with the exports, implements directives, and
         // anything transitively referenced by those adapters.
         let mut live = HashSet::new();
@@ -433,11 +443,6 @@ impl NonstandardWitSection {
         }
         for (_, _, id) in self.implements.iter() {
             self.add_live(*id, &mut live);
-        }
-        for import in aux.import_map.values() {
-            if let AuxImport::Closure { adapter, .. } = import {
-                self.add_live(*adapter, &mut live);
-            }
         }
 
         // And now that we have the live set we can filter out our list of
@@ -457,7 +462,7 @@ impl NonstandardWitSection {
         };
         for instr in instructions {
             match instr.instr {
-                Instruction::StackClosure { adapter, .. } | Instruction::CallAdapter(adapter) => {
+                Instruction::Closure { adapter, .. } | Instruction::CallAdapter(adapter) => {
                     self.add_live(adapter, live);
                 }
                 _ => {}
@@ -471,7 +476,7 @@ impl walrus::CustomSection for NonstandardWitSection {
         "nonstandard wit section"
     }
 
-    fn data(&self, _: &walrus::IdsToIndices) -> Cow<[u8]> {
+    fn data(&self, _: &walrus::IdsToIndices) -> Cow<'_, [u8]> {
         panic!("shouldn't emit custom sections just yet");
     }
 
@@ -485,7 +490,7 @@ impl walrus::CustomSection for NonstandardWitSection {
             };
             for instr in instrs {
                 match instr.instr {
-                    DeferFree { free: f, .. } | CallCore(f) => {
+                    DeferFree { free: f, .. } => {
                         roots.push_func(f);
                     }
                     StoreRetptr { mem, .. }

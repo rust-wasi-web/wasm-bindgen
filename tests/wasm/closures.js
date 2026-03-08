@@ -162,3 +162,122 @@ exports.js_store_forgotten_closure = f => {
 exports.js_call_forgotten_closure = () => {
   FORGOTTEN_CLOSURE();
 };
+
+// Test for RefClosure - closure works during callback, throws after
+let CLOSURE_WITH_CACHE = null;
+
+exports.closure_with_call = f => {
+  f();
+};
+
+// Same as closure_with_call but used to test RefClosure -> &Closure deref
+exports.closure_with_call_closure = f => {
+  f();
+};
+
+exports.closure_with_cache = f => {
+  CLOSURE_WITH_CACHE = f;
+};
+
+exports.closure_with_call_cached = () => {
+  CLOSURE_WITH_CACHE();
+};
+
+// Test that calling a RefClosure closure after it's been invalidated throws
+let CLOSURE_WITH_ARG_CACHE = null;
+
+exports.closure_with_call_and_cache = f => {
+  CLOSURE_WITH_ARG_CACHE = f;
+  f(1);
+  f(2);
+  f(3);
+};
+
+exports.closure_with_call_cached_throws = () => {
+  try {
+    CLOSURE_WITH_ARG_CACHE(42);
+    return false; // Should not reach here
+  } catch (e) {
+    // Expected: closure invoked after being dropped
+    return true;
+  }
+};
+
+// Test for passing Closure by value (ownership transfer)
+let OWNED_CLOSURE_CACHE = null;
+
+exports.closure_take_ownership = f => {
+  // Store the closure and call it
+  OWNED_CLOSURE_CACHE = f;
+  f();
+};
+
+exports.closure_take_ownership_with_arg = (f, value) => {
+  f(value);
+};
+
+exports.closure_call_stored = () => {
+  // Call the previously stored closure
+  OWNED_CLOSURE_CACHE();
+};
+
+// Test for ScopedClosure::borrow with Fn closures
+exports.closure_fn_with_call = f => {
+  f();
+};
+
+exports.closure_fn_with_call_arg = (f, value) => {
+  f(value);
+};
+
+// Test for ImmediateClosure
+exports.immediate_closure_call = f => {
+  f();
+};
+
+exports.immediate_closure_call_arg = (f, value) => {
+  f(value);
+};
+
+exports.immediate_closure_call_ret = (f, value) => {
+  return f(value);
+};
+
+exports.immediate_closure_fn_call = f => {
+  f();
+};
+
+exports.immediate_closure_catches_panic = f => {
+  try {
+    f();
+    return false;
+  } catch (e) {
+    return true;
+  }
+};
+
+// Calls the closure, which may call immediate_closure_fnmut_reentrant_invoke
+// to trigger reentrancy
+let IMMEDIATE_REENTRANT_CB = null;
+exports.immediate_closure_fnmut_reentrant = f => {
+  IMMEDIATE_REENTRANT_CB = f;
+  f();
+  IMMEDIATE_REENTRANT_CB = null;
+};
+
+// Called from inside the closure to attempt reentrant invocation
+exports.immediate_closure_fnmut_reentrant_invoke = () => {
+  IMMEDIATE_REENTRANT_CB();
+};
+
+// Same pattern for Fn (immutable) closures
+let IMMEDIATE_FN_REENTRANT_CB = null;
+exports.immediate_closure_fn_reentrant = f => {
+  IMMEDIATE_FN_REENTRANT_CB = f;
+  f();
+  IMMEDIATE_FN_REENTRANT_CB = null;
+};
+
+exports.immediate_closure_fn_reentrant_invoke = () => {
+  IMMEDIATE_FN_REENTRANT_CB();
+};

@@ -8,8 +8,6 @@ use alloc::string::String;
 use js_sys::Error;
 use wasm_bindgen::prelude::*;
 
-use super::TestResult;
-
 /// Implementation of `Formatter` for browsers.
 ///
 /// Routes all output to a `pre` on the page currently. Eventually this probably
@@ -39,10 +37,6 @@ impl super::Formatter for Worker {
         write_output_line(JsValue::from(String::from(line)));
     }
 
-    fn log_test(&self, name: &str, result: &TestResult) {
-        self.writeln(&format!("test {} ... {}", name, result));
-    }
-
     fn stringify_error(&self, err: &JsValue) -> String {
         // TODO: this should be a checked cast to `Error`
         let error = Error::from(err.clone());
@@ -51,7 +45,7 @@ impl super::Formatter for Worker {
         let err = WorkerError::from(err.clone());
         let stack = err.stack();
 
-        let header = format!("{}: {}", name, message);
+        let header = format!("{name}: {message}");
         let stack = match stack.as_string() {
             Some(stack) => stack,
             None => return header,
@@ -65,6 +59,6 @@ impl super::Formatter for Worker {
         }
 
         // Fallback to make sure we don't lose any info
-        format!("{}\n{}", header, stack)
+        format!("{header}\n{stack}")
     }
 }

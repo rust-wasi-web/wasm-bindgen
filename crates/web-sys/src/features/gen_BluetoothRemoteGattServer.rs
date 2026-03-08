@@ -14,7 +14,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `BluetoothRemoteGattServer`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub type BluetoothRemoteGattServer;
     #[cfg(web_sys_unstable_apis)]
     #[cfg(feature = "BluetoothDevice")]
@@ -26,7 +26,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `BluetoothDevice`, `BluetoothRemoteGattServer`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn device(this: &BluetoothRemoteGattServer) -> BluetoothDevice;
     #[cfg(web_sys_unstable_apis)]
     # [wasm_bindgen (structural , method , getter , js_class = "BluetoothRemoteGATTServer" , js_name = connected)]
@@ -37,7 +37,7 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `BluetoothRemoteGattServer`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn connected(this: &BluetoothRemoteGattServer) -> bool;
     #[cfg(web_sys_unstable_apis)]
     # [wasm_bindgen (method , structural , js_class = "BluetoothRemoteGATTServer" , js_name = connect)]
@@ -48,8 +48,10 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `BluetoothRemoteGattServer`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
-    pub fn connect(this: &BluetoothRemoteGattServer) -> ::js_sys::Promise;
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub fn connect(
+        this: &BluetoothRemoteGattServer,
+    ) -> ::js_sys::Promise<BluetoothRemoteGattServer>;
     #[cfg(web_sys_unstable_apis)]
     # [wasm_bindgen (method , structural , js_class = "BluetoothRemoteGATTServer" , js_name = disconnect)]
     #[doc = "The `disconnect()` method."]
@@ -59,73 +61,80 @@ extern "C" {
     #[doc = "*This API requires the following crate features to be activated: `BluetoothRemoteGattServer`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn disconnect(this: &BluetoothRemoteGattServer);
     #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "BluetoothRemoteGattService")]
     # [wasm_bindgen (method , structural , js_class = "BluetoothRemoteGATTServer" , js_name = getPrimaryService)]
     #[doc = "The `getPrimaryService()` method."]
     #[doc = ""]
     #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/BluetoothRemoteGATTServer/getPrimaryService)"]
     #[doc = ""]
-    #[doc = "*This API requires the following crate features to be activated: `BluetoothRemoteGattServer`*"]
+    #[doc = "*This API requires the following crate features to be activated: `BluetoothRemoteGattServer`, `BluetoothRemoteGattService`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn get_primary_service_with_str(
         this: &BluetoothRemoteGattServer,
         service: &str,
-    ) -> ::js_sys::Promise;
+    ) -> ::js_sys::Promise<BluetoothRemoteGattService>;
     #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "BluetoothRemoteGattService")]
     # [wasm_bindgen (method , structural , js_class = "BluetoothRemoteGATTServer" , js_name = getPrimaryService)]
     #[doc = "The `getPrimaryService()` method."]
     #[doc = ""]
     #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/BluetoothRemoteGATTServer/getPrimaryService)"]
     #[doc = ""]
-    #[doc = "*This API requires the following crate features to be activated: `BluetoothRemoteGattServer`*"]
+    #[doc = "*This API requires the following crate features to be activated: `BluetoothRemoteGattServer`, `BluetoothRemoteGattService`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn get_primary_service_with_u32(
         this: &BluetoothRemoteGattServer,
         service: u32,
-    ) -> ::js_sys::Promise;
+    ) -> ::js_sys::Promise<BluetoothRemoteGattService>;
     #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "BluetoothRemoteGattService")]
     # [wasm_bindgen (method , structural , js_class = "BluetoothRemoteGATTServer" , js_name = getPrimaryServices)]
     #[doc = "The `getPrimaryServices()` method."]
     #[doc = ""]
     #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/BluetoothRemoteGATTServer/getPrimaryServices)"]
     #[doc = ""]
-    #[doc = "*This API requires the following crate features to be activated: `BluetoothRemoteGattServer`*"]
+    #[doc = "*This API requires the following crate features to be activated: `BluetoothRemoteGattServer`, `BluetoothRemoteGattService`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
-    pub fn get_primary_services(this: &BluetoothRemoteGattServer) -> ::js_sys::Promise;
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub fn get_primary_services(
+        this: &BluetoothRemoteGattServer,
+    ) -> ::js_sys::Promise<::js_sys::Array<BluetoothRemoteGattService>>;
     #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "BluetoothRemoteGattService")]
     # [wasm_bindgen (method , structural , js_class = "BluetoothRemoteGATTServer" , js_name = getPrimaryServices)]
     #[doc = "The `getPrimaryServices()` method."]
     #[doc = ""]
     #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/BluetoothRemoteGATTServer/getPrimaryServices)"]
     #[doc = ""]
-    #[doc = "*This API requires the following crate features to be activated: `BluetoothRemoteGattServer`*"]
+    #[doc = "*This API requires the following crate features to be activated: `BluetoothRemoteGattServer`, `BluetoothRemoteGattService`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn get_primary_services_with_str(
         this: &BluetoothRemoteGattServer,
         service: &str,
-    ) -> ::js_sys::Promise;
+    ) -> ::js_sys::Promise<::js_sys::Array<BluetoothRemoteGattService>>;
     #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "BluetoothRemoteGattService")]
     # [wasm_bindgen (method , structural , js_class = "BluetoothRemoteGATTServer" , js_name = getPrimaryServices)]
     #[doc = "The `getPrimaryServices()` method."]
     #[doc = ""]
     #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/BluetoothRemoteGATTServer/getPrimaryServices)"]
     #[doc = ""]
-    #[doc = "*This API requires the following crate features to be activated: `BluetoothRemoteGattServer`*"]
+    #[doc = "*This API requires the following crate features to be activated: `BluetoothRemoteGattServer`, `BluetoothRemoteGattService`*"]
     #[doc = ""]
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
-    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://wasm-bindgen.github.io/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn get_primary_services_with_u32(
         this: &BluetoothRemoteGattServer,
         service: u32,
-    ) -> ::js_sys::Promise;
+    ) -> ::js_sys::Promise<::js_sys::Array<BluetoothRemoteGattService>>;
 }

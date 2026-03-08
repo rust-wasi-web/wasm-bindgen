@@ -8,8 +8,6 @@ use alloc::string::String;
 use js_sys::Error;
 use wasm_bindgen::prelude::*;
 
-use super::TestResult;
-
 /// Implementation of `Formatter` for browsers.
 ///
 /// Routes all output to a `pre` on the page currently. Eventually this probably
@@ -42,7 +40,12 @@ impl Browser {
     /// (requires `Node::new()` to have return `None` first).
     pub fn new() -> Browser {
         let pre = DOCUMENT.with(|document| document.getElementById("output"));
-        pre.set_text_content("");
+        // Append a newline to separate any existing content (e.g., "Loading Wasm module...")
+        // from the test output. This matches the worker behavior and allows the headless
+        // runner to stream output correctly.
+        let mut content = pre.text_content();
+        content.push('\n');
+        pre.set_text_content(&content);
         Browser { pre }
     }
 }
@@ -55,10 +58,6 @@ impl super::Formatter for Browser {
         self.pre.set_text_content(&html);
     }
 
-    fn log_test(&self, name: &str, result: &TestResult) {
-        self.writeln(&format!("test {} ... {}", name, result));
-    }
-
     fn stringify_error(&self, err: &JsValue) -> String {
         // TODO: this should be a checked cast to `Error`
         let err = Error::from(err.clone());
@@ -67,7 +66,7 @@ impl super::Formatter for Browser {
         let err = BrowserError::from(JsValue::from(err));
         let stack = err.stack();
 
-        let header = format!("{}: {}", name, message);
+        let header = format!("{name}: {message}");
         let stack = match stack.as_string() {
             Some(stack) => stack,
             None => return header,
@@ -81,6 +80,6 @@ impl super::Formatter for Browser {
         }
 
         // Fallback to make sure we don't lose any info
-        format!("{}\n{}", header, stack)
+        format!("{header}\n{stack}")
     }
 }

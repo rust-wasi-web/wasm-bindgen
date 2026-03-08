@@ -1,7 +1,5 @@
-#![doc(html_root_url = "https://docs.rs/wasm-bindgen-cli-support/0.2")]
-
 use anyhow::{bail, Context, Error};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{hash_map::Entry, BTreeMap, HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::mem;
@@ -19,10 +17,13 @@ mod decode;
 mod descriptor;
 mod descriptors;
 mod externref;
+mod interpreter;
 mod intrinsic;
 mod js;
 mod multivalue;
+mod transforms;
 pub mod wasm2es6js;
+mod wasm_conventions;
 mod wit;
 
 pub struct Bindgen {
@@ -43,10 +44,10 @@ pub struct Bindgen {
     multi_value: bool,
     encode_into: EncodeInto,
     split_linked_modules: bool,
-    symbol_dispose: bool,
     wait: bool,
     wasi: bool,
     wwrr_dir: Option<PathBuf>,
+    generate_reset_state: bool,
 }
 
 pub struct Output {
@@ -61,7 +62,7 @@ struct Generated {
     js: String,
     ts: String,
     start: Option<String>,
-    snippets: HashMap<String, Vec<String>>,
+    snippets: BTreeMap<String, Vec<String>>,
     local_modules: HashMap<String, String>,
     npm_dependencies: HashMap<String, (PathBuf, String)>,
     typescript: bool,
@@ -75,6 +76,7 @@ enum OutputMode {
     NoModules { global: String },
     Node { module: bool },
     Deno,
+    Module,
 }
 
 enum Input {
@@ -84,6 +86,7 @@ enum Input {
     None,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum EncodeInto {
     Test,
     Always,
@@ -95,7 +98,6 @@ impl Bindgen {
         let externref =
             env::var("WASM_BINDGEN_ANYREF").is_ok() || env::var("WASM_BINDGEN_EXTERNREF").is_ok();
         let multi_value = env::var("WASM_BINDGEN_MULTI_VALUE").is_ok();
-        let symbol_dispose = env::var("WASM_BINDGEN_EXPERIMENTAL_SYMBOL_DISPOSE").is_ok();
         Bindgen {
             input: Input::None,
             out_name: None,
@@ -116,10 +118,10 @@ impl Bindgen {
             encode_into: EncodeInto::Test,
             omit_default_module_path: true,
             split_linked_modules: false,
-            symbol_dispose,
             wait: false,
             wasi: false,
             wwrr_dir: env::var_os("WWRR_DIR").map(|v| v.into()),
+            generate_reset_state: false,
         }
     }
 
@@ -156,10 +158,7 @@ impl Bindgen {
     fn switch_mode(&mut self, mode: OutputMode, flag: &str) -> Result<(), Error> {
         match self.mode {
             OutputMode::Bundler { .. } => self.mode = mode,
-            _ => bail!(
-                "cannot specify `{}` with another output mode already specified",
-                flag
-            ),
+            _ => bail!("cannot specify `{flag}` with another output mode already specified"),
         }
         Ok(())
     }
@@ -226,6 +225,13 @@ impl Bindgen {
         if deno {
             self.switch_mode(OutputMode::Deno, "--target deno")?;
             self.encode_into(EncodeInto::Always);
+        }
+        Ok(self)
+    }
+
+    pub fn module(&mut self, source_phase: bool) -> Result<&mut Bindgen, Error> {
+        if source_phase {
+            self.switch_mode(OutputMode::Module, "--target module")?;
         }
         Ok(self)
     }
@@ -310,6 +316,11 @@ impl Bindgen {
         self
     }
 
+    pub fn reset_state_function(&mut self, generate_reset_state: bool) -> &mut Bindgen {
+        self.generate_reset_state = generate_reset_state;
+        self
+    }
+
     pub fn generate<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Error> {
         self.generate_output()?.emit(path.as_ref())
     }
@@ -345,13 +356,12 @@ impl Bindgen {
         };
 
         // Enable reference type transformations if the module is already using it.
-        if let Ok(true) = wasm_bindgen_wasm_conventions::target_feature(&module, "reference-types")
-        {
+        if let Ok(true) = wasm_conventions::target_feature(&module, "reference-types") {
             self.externref = true;
         }
 
         // Enable multivalue transformations if the module is already using it.
-        if let Ok(true) = wasm_bindgen_wasm_conventions::target_feature(&module, "multivalue") {
+        if let Ok(true) = wasm_conventions::target_feature(&module, "multivalue") {
             self.multi_value = true;
         }
 
@@ -369,14 +379,24 @@ impl Bindgen {
         }
 
         // Perform thread transform for wasm32-unknown-unknown with atomics.
-        let thread_count = wasm_bindgen_threads_xform::run(&mut module)
+        let thread_count = transforms::threads::run(&mut module)
             .context("failed to prepare module for threading")?;
 
         // Perform wait transform for WASI or if explicitly requested.
         if self.wasi || self.wait {
             log::debug!("transformating atomics.wait into spinning on the main thread");
-            wasm_bindgen_wait_xform::run(&mut module, PLACEHOLDER_MODULE)
+            transforms::wait::run(&mut module, PLACEHOLDER_MODULE)
                 .context("wait transform failed")?;
+        }
+
+        // Check that reset_state is only used with --target module, web, or node
+        if self.generate_reset_state
+            && !matches!(
+                self.mode,
+                OutputMode::Module | OutputMode::Web | OutputMode::Node { module: false }
+            )
+        {
+            bail!("--experimental-reset-state-function is only supported for --target module, --target web, or --target nodejs")
         }
 
         // If requested, turn all mangled symbols into prettier unmangled
@@ -387,12 +407,30 @@ impl Bindgen {
         if !self.keep_lld_exports {
             unexported_unused_lld_things(&mut module);
         }
+        // Quick fix for https://github.com/wasm-bindgen/wasm-bindgen/pull/4931
+        // which is likely a compiler bug
+        {
+            let exn_import = module.imports.iter().find_map(|impt| match impt.kind {
+                walrus::ImportKind::Tag(id)
+                    if impt.module == "env" && impt.name == "__cpp_exception" =>
+                {
+                    Some((impt, id))
+                }
+                _ => None,
+            });
+            if let Some((import, id)) = exn_import {
+                let original_import_id = import.id();
+                let tag = module.tags.get_mut(id);
+                tag.kind = walrus::TagKind::Local;
+                module.imports.delete(original_import_id);
+                module.exports.add("__cpp_exception", tag.id);
+            }
 
-        // We're making quite a few changes, list ourselves as a producer.
-        module
-            .producers
-            .add_processed_by("wasm-bindgen", &wasm_bindgen_shared::version());
-
+            // We're making quite a few changes, list ourselves as a producer.
+            module
+                .producers
+                .add_processed_by("wasm-bindgen", &wasm_bindgen_shared::version());
+        }
         // Parse and remove our custom section before executing descriptors.
         // That includes checking that the binary has the same schema version
         // as this version of the CLI, which is why we do it first - to make
@@ -452,6 +490,11 @@ impl Bindgen {
                 .context("failed to transform return pointers into multi-value Wasm")?;
         }
 
+        // Generate Wasm catch wrappers for imports with #[wasm_bindgen(catch)].
+        // This runs after externref processing so that we have access to the
+        // externref table and allocation function.
+        generate_wasm_catch_wrappers(&mut module)?;
+
         // We've done a whole bunch of transformations to the Wasm module, many
         // of which leave "garbage" lying around, so let's prune out all our
         // unnecessary things here.
@@ -508,7 +551,7 @@ impl Bindgen {
     }
 
     fn local_module_name(&self, module: &str) -> String {
-        format!("./snippets/{}", module)
+        format!("./snippets/{module}")
     }
 
     fn inline_js_module_name(
@@ -516,10 +559,7 @@ impl Bindgen {
         unique_crate_identifier: &str,
         snippet_idx_in_crate: usize,
     ) -> String {
-        format!(
-            "./snippets/{}/inline{}.js",
-            unique_crate_identifier, snippet_idx_in_crate,
-        )
+        format!("./snippets/{unique_crate_identifier}/inline{snippet_idx_in_crate}.js",)
     }
 }
 
@@ -531,13 +571,15 @@ fn reset_indentation(s: &str) -> String {
         line.starts_with("*")
     }
 
-    for line in s.lines() {
+    static TAB: &str = "    ";
+
+    for line in s.trim().lines() {
         let line = line.trim();
 
         // handle doc comments separately
         if is_doc_comment(line) {
             for _ in 0..indent {
-                dst.push_str("    ");
+                dst.push_str(TAB);
             }
             dst.push(' ');
             dst.push_str(line);
@@ -556,7 +598,7 @@ fn reset_indentation(s: &str) -> String {
         };
         if !line.is_empty() {
             for _ in 0..indent + extra {
-                dst.push_str("    ");
+                dst.push_str(TAB);
             }
             dst.push_str(line);
         }
@@ -569,14 +611,34 @@ fn reset_indentation(s: &str) -> String {
     dst
 }
 
+/// Since Rust will soon adopt v0 mangling as the default,
+/// and the `rustc_demangle` crate doesn't output closure disambiguators,
+/// duplicate symbols can appear. We handle this case manually.
+///
+/// issue: <https://github.com/wasm-bindgen/wasm-bindgen/issues/4820>
 fn demangle(module: &mut Module) {
+    let (lower, upper) = module.funcs.iter().size_hint();
+    let mut counter: HashMap<String, i32> = HashMap::with_capacity(upper.unwrap_or(lower));
+
     for func in module.funcs.iter_mut() {
-        let name = match &func.name {
-            Some(name) => name,
-            None => continue,
+        let Some(name) = &func.name else {
+            continue;
         };
-        if let Ok(sym) = rustc_demangle::try_demangle(name) {
-            func.name = Some(sym.to_string());
+
+        let Ok(sym) = rustc_demangle::try_demangle(name) else {
+            continue;
+        };
+
+        let demangled = sym.to_string();
+        match counter.entry(demangled) {
+            Entry::Occupied(mut entry) => {
+                func.name = Some(format!("{}[{}]", entry.key(), entry.get()));
+                *entry.get_mut() += 1;
+            }
+            Entry::Vacant(entry) => {
+                func.name = Some(entry.key().clone());
+                entry.insert(1);
+            }
         }
     }
 }
@@ -589,6 +651,7 @@ impl OutputMode {
                 | OutputMode::Web
                 | OutputMode::Node { module: true }
                 | OutputMode::Deno
+                | OutputMode::Module
         )
     }
 
@@ -600,11 +663,8 @@ impl OutputMode {
         matches!(self, OutputMode::NoModules { .. })
     }
 
-    fn esm_integration(&self) -> bool {
-        matches!(
-            self,
-            OutputMode::Bundler { .. } | OutputMode::Node { module: true }
-        )
+    fn bundler(&self) -> bool {
+        matches!(self, OutputMode::Bundler { .. })
     }
 }
 
@@ -643,7 +703,7 @@ impl Output {
         self.generated.start.as_ref()
     }
 
-    pub fn snippets(&self) -> &HashMap<String, Vec<String>> {
+    pub fn snippets(&self) -> &BTreeMap<String, Vec<String>> {
         &self.generated.snippets
     }
 
@@ -671,6 +731,7 @@ impl Output {
         let wasm_name = format!("{}_bg", self.stem);
         let wasm_path = out_dir.join(&wasm_name).with_extension("wasm");
         fs::create_dir_all(out_dir)?;
+
         let wasm_bytes = self.module.emit_wasm();
         fs::write(&wasm_path, wasm_bytes)
             .with_context(|| format!("failed to write `{}`", wasm_path.display()))?;
@@ -681,7 +742,7 @@ impl Output {
         // we've collected them from all the programs.
         for (identifier, list) in gen.snippets.iter() {
             for (i, js) in list.iter().enumerate() {
-                let name = format!("inline{}.js", i);
+                let name = format!("inline{i}.js");
                 let path = out_dir.join("snippets").join(identifier).join(name);
                 fs::create_dir_all(path.parent().unwrap())?;
                 fs::write(&path, js)
@@ -730,47 +791,23 @@ impl Output {
         }
 
         let js_path = out_dir.join(&self.stem).with_extension(extension);
+        write(&js_path, reset_indentation(&gen.js))?;
 
-        if gen.mode.esm_integration() {
-            let js_name = format!("{}_bg.{}", self.stem, extension);
-
-            let start = gen.start.as_deref().unwrap_or("");
-
-            if matches!(gen.mode, OutputMode::Node { .. }) {
-                write(
-                    &js_path,
-                    format!(
-                        "\
-{start}
-export * from \"./{js_name}\";",
-                    ),
-                )?;
-            } else {
-                write(
-                    &js_path,
-                    format!(
-                        "\
-import * as wasm from \"./{wasm_name}.wasm\";
-export * from \"./{js_name}\";
-{start}"
-                    ),
-                )?;
-            }
-            write(out_dir.join(&js_name), reset_indentation(&gen.js))?;
-        } else {
-            write(&js_path, reset_indentation(&gen.js))?;
+        if let Some(start) = &gen.start {
+            let js_path = out_dir.join(wasm_name).with_extension(extension);
+            write(&js_path, reset_indentation(start))?;
         }
 
         if gen.typescript {
             let ts_path = js_path.with_extension("d.ts");
-            fs::write(&ts_path, &gen.ts)
+            fs::write(&ts_path, reset_indentation(&gen.ts))
                 .with_context(|| format!("failed to write `{}`", ts_path.display()))?;
         }
 
         if gen.typescript {
             let ts_path = wasm_path.with_extension("wasm.d.ts");
             let ts = wasm2es6js::typescript(&self.module)?;
-            fs::write(&ts_path, ts)
+            fs::write(&ts_path, reset_indentation(&ts))
                 .with_context(|| format!("failed to write `{}`", ts_path.display()))?;
         }
 
@@ -796,6 +833,49 @@ export * from \"./{js_name}\";
 
         Ok(())
     }
+}
+
+/// Generate Wasm catch wrappers for imports marked with `#[wasm_bindgen(catch)]`.
+///
+/// When exception handling instructions are available in the module, this generates
+/// Wasm wrapper functions that catch JavaScript exceptions using `WebAssembly.JSTag`
+/// instead of relying on JS `handleError` wrappers.
+fn generate_wasm_catch_wrappers(module: &mut Module) -> Result<(), Error> {
+    let eh_version = transforms::detect_exception_handling_version(module);
+    log::debug!("Exception handling version: {eh_version:?}");
+
+    if eh_version == transforms::ExceptionHandlingVersion::None {
+        return Ok(());
+    }
+
+    // We need to temporarily remove the custom sections to avoid borrow issues
+    let mut aux = module
+        .customs
+        .delete_typed::<wit::WasmBindgenAux>()
+        .expect("aux section should exist");
+    let wit = module
+        .customs
+        .delete_typed::<wit::NonstandardWitSection>()
+        .expect("wit section should exist");
+
+    log::debug!(
+        "Running catch handler: imports_with_catch={}, externref_table={:?}, externref_alloc={:?}, exn_store={:?}",
+        aux.imports_with_catch.len(),
+        aux.externref_table,
+        aux.externref_alloc,
+        aux.exn_store
+    );
+
+    let result = transforms::catch_handler::run(module, &mut aux, &wit, eh_version)
+        .context("failed to generate catch wrappers");
+
+    // Re-add the custom sections
+    module.customs.add(*wit);
+    module.customs.add(*aux);
+
+    result?;
+
+    Ok(())
 }
 
 fn gc_module_and_adapters(module: &mut Module) {
@@ -825,8 +905,7 @@ fn gc_module_and_adapters(module: &mut Module) {
         // good to go. If something is deleted though then we may have free'd up
         // some functions in the main module to get deleted, so go again to gc
         // things.
-        let aux = module.customs.get_typed::<wit::WasmBindgenAux>().unwrap();
-        let any_removed = section.gc(aux);
+        let any_removed = section.gc();
         module.customs.add(*section);
         if !any_removed {
             break;
