@@ -383,7 +383,7 @@ impl<'a> Context<'a> {
             self.globals.push_str(&directive);
         }
 
-        if !self.js_imports.is_empty() {
+        if !self.js_imports.is_empty() || self.wasi {
             region!(self, "js imports", {
                 let imports = self.js_import_header()?;
                 self.globals.push_str(&imports);
@@ -397,21 +397,21 @@ impl<'a> Context<'a> {
             });
         }
 
-        if let Some(mem) = self.module.memories.iter().next() {
-            if let Some(id) = mem.import {
-                if !self.wasi {
+        if !self.wasi {
+            if let Some(mem) = self.module.memories.iter().next() {
+                if let Some(id) = mem.import {
                     self.module.imports.get_mut(id).module = PLACEHOLDER_MODULE.to_owned();
+                    let mut init_memory = "new WebAssembly.Memory({".to_string();
+                    init_memory.push_str(&format!("initial:{}", mem.initial));
+                    if let Some(max) = mem.maximum {
+                        init_memory.push_str(&format!(",maximum:{max}"));
+                    }
+                    if mem.shared {
+                        init_memory.push_str(",shared:true");
+                    }
+                    init_memory.push_str("})");
+                    self.wasm_import_definitions.insert(id, init_memory);
                 }
-                let mut init_memory = "new WebAssembly.Memory({".to_string();
-                init_memory.push_str(&format!("initial:{}", mem.initial));
-                if let Some(max) = mem.maximum {
-                    init_memory.push_str(&format!(",maximum:{max}"));
-                }
-                if mem.shared {
-                    init_memory.push_str(",shared:true");
-                }
-                init_memory.push_str("})");
-                self.wasm_import_definitions.insert(id, init_memory);
             }
         }
 
@@ -539,8 +539,9 @@ impl<'a> Context<'a> {
     fn generate_esm_cjs_imports(&mut self, module_name: &str, has_memory: bool) -> String {
         let mut imports = String::new();
         let init_memory_arg = if has_memory { "memory" } else { "" };
+        let export = if self.wasi { "export " } else { "" };
         let mut fn_def = format!(
-            "function __wbg_get_imports({init_memory_arg}) {{
+            "{export}function __wbg_get_imports({init_memory_arg}) {{
             const import0 = {{
             __proto__: null,
         "
@@ -560,7 +561,9 @@ impl<'a> Context<'a> {
             .module
             .imports
             .iter()
-            .filter(|i| !self.wasi || !is_wasi_import(i))
+            .filter(|i| {
+                !self.wasi || !(is_wasi_import(i) || i.module == "env" && i.name == "memory")
+            })
             .map(|import| &import.module)
             .filter(|module| module.as_str() != PLACEHOLDER_MODULE);
         for (i, module) in import_modules.enumerate() {
@@ -923,7 +926,8 @@ export const __wbg_memory: WebAssembly.Memory;
             }
         }
 
-        let atomics_utils = "\
+        let atomics_utils = if self.wait || self.wasi {
+            "\
                 function __wbg_wait_prohibited() {
                     try {
                         const sab = new SharedArrayBuffer(4);
@@ -934,10 +938,14 @@ export const __wbg_memory: WebAssembly.Memory;
                         return true;
                     }
                 }
+
                 const __wbg_atomics_pause_ref = (typeof Atomics?.pause === 'function')
                     ? Atomics.pause
                     : () => { };
-            ";
+            "
+        } else {
+            ""
+        };
 
         let check_wait_prohibited = if self.wait || self.wasi {
             format!("wasm.{WAIT_PROHIBITED_GLOBAL}.value = __wbg_wait_prohibited() ? 1 : 0;")
@@ -953,9 +961,7 @@ export const __wbg_memory: WebAssembly.Memory;
                 wasmModule = module;
                 {init_memviews}{init_stack_size_check}{check_wait_prohibited}{start}return wasm;
             }}
-
             {atomics_utils}
-
             async function __wbg_load(module, imports) {{
                 if (typeof Response === 'function' && module instanceof Response) {{
                     if (typeof WebAssembly.instantiateStreaming === 'function') {{
@@ -1081,6 +1087,7 @@ export const __wbg_memory: WebAssembly.Memory;
             format!(
                 "\
                 export const __runtimeLogConfig = {{}};
+                let wasm;
                 let instance;
                 export function __wbg_set_exports(exports) {{
                     wasm = exports;
@@ -4647,7 +4654,7 @@ function __wbg_handle_catch(e) {{
 
             Intrinsic::ClockNs => {
                 assert_eq!(args.len(), 0);
-                format!("BigInt(Math.round(performance.now() * 1000 * 1000))")
+                "BigInt(Math.round(performance.now() * 1000 * 1000))".to_string()
             }
 
             Intrinsic::SpinTimeout => {

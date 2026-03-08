@@ -1,11 +1,17 @@
-use crate::descriptor::{Descriptor, Function};
-use crate::descriptors::WasmBindgenDescriptorsSection;
 use crate::intrinsic::Intrinsic;
 use crate::transforms::threads::ThreadCount;
 use crate::{decode, wasm_conventions, Bindgen, PLACEHOLDER_MODULE};
 use crate::{
     decode::{ImportModule, LocalModule},
     INIT_EXTERNREF_TABLE_NAME,
+};
+use crate::{
+    descriptor::{Descriptor, Function},
+    transforms::wait::CLOCK_NS_IMPORT,
+};
+use crate::{
+    descriptors::WasmBindgenDescriptorsSection,
+    transforms::wait::{ATOMICS_PAUSE_IMPORT, SPIN_TIMEOUT_IMPORT},
 };
 use anyhow::{anyhow, bail, ensure, Error};
 use std::collections::{BTreeSet, HashMap};
@@ -225,6 +231,24 @@ impl<'a> Context<'a> {
             vec![Descriptor::Externref],
             Descriptor::Unit,
             AuxImport::Intrinsic(Intrinsic::ObjectDropRef),
+        )?;
+        self.add_aux_import_to_import_map(
+            CLOCK_NS_IMPORT,
+            vec![],
+            Descriptor::I64,
+            AuxImport::Intrinsic(Intrinsic::ClockNs),
+        )?;
+        self.add_aux_import_to_import_map(
+            SPIN_TIMEOUT_IMPORT,
+            vec![],
+            Descriptor::Unit,
+            AuxImport::Intrinsic(Intrinsic::SpinTimeout),
+        )?;
+        self.add_aux_import_to_import_map(
+            ATOMICS_PAUSE_IMPORT,
+            vec![],
+            Descriptor::Unit,
+            AuxImport::Intrinsic(Intrinsic::AtomicsPause),
         )?;
 
         for import in imports_to_delete {
@@ -1376,7 +1400,8 @@ impl<'a> Context<'a> {
             // phase, but we don't have an implementation for them. We don't
             // need to error about them in this verification pass though,
             // having them lingering in the module is normal.
-            if import.name == "__wbindgen_describe" || import.name == "__wbindgen_describe_cast" {
+            let special = ["__wbindgen_describe", "__wbindgen_describe_cast"];
+            if special.contains(&import.name.as_str()) {
                 continue;
             }
             if implemented.remove(&import.id()).is_none() {

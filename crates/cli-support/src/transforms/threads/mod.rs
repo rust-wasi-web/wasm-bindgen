@@ -1,11 +1,11 @@
-use crate::wasm_conventions;
+use crate::{is_wasi_import, wasm_conventions};
 use anyhow::{anyhow, bail, Error};
 use std::cmp;
 use walrus::{
     ir::MemArg, ConstExpr, ExportItem, FunctionId, GlobalId, GlobalKind, InstrSeqBuilder, MemoryId,
     Module, ValType,
 };
-use walrus::{ir::Value, FunctionBuilder, Import};
+use walrus::{ir::Value, FunctionBuilder};
 
 pub const PAGE_SIZE: u32 = 1 << 16;
 const DEFAULT_THREAD_STACK_SIZE: u32 = 1 << 21; // 2MB
@@ -479,11 +479,6 @@ fn with_temp_stack(
         .i32_const(1)
         .atomic_notify(memory, ATOMIC_MEM_ARG)
         .drop();
-}
-
-/// Checks whether the import is from the WASI API.
-fn is_wasi_import(import: &Import) -> bool {
-    import.module == "wasi_snapshot_preview1" || import.module == "wasi"
 }
 
 #[cfg(test)]

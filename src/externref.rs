@@ -1,5 +1,5 @@
-use crate::__rt;
 use crate::JsValue;
+use crate::__rt;
 
 use alloc::slice;
 use alloc::vec::Vec;
@@ -104,16 +104,13 @@ fn internal_error(_msg: &str) -> ! {
         if #[cfg(debug_assertions)] {
             super::throw_str(_msg)
         } else if #[cfg(feature = "std")] {
-            let _ = msg;
             std::process::abort();
         } else if #[cfg(all(
             target_arch = "wasm32",
             any(target_os = "unknown", target_os = "none", target_os = "wasi")
         ))] {
-            let _ = msg;
             core::arch::wasm32::unreachable();
         } else {
-            let _ = msg;
             unreachable!()
         }
     }

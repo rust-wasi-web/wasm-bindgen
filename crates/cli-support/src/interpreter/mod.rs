@@ -98,7 +98,7 @@ impl Interpreter {
 
         // Give ourselves some memory and set the stack pointer
         // (the LLVM call stack, now the Wasm stack, global 0) to the top.
-        ret.mem = vec![0; 0x800000];
+        ret.mem = vec![0; 0x8000];
         ret.sp = ret.mem.len() as i32;
 
         // Figure out where the `__wbindgen_describe` imported function is, if
@@ -271,7 +271,7 @@ impl Frame<'_> {
                                 0
                             }
                         }
-                        op => bail!("invalid unary op {:?}", op),
+                        op => bail!("invalid unary op {op:?}"),
                     })
                 }
 
@@ -358,7 +358,6 @@ impl Frame<'_> {
 
                 Instr::Return(_) => {
                     log::trace!("return");
-                    self.interp.stopped = true;
                     break;
                 }
 

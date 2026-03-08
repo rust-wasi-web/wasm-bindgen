@@ -40,6 +40,7 @@
 
 extern crate alloc;
 
+use alloc::boxed::Box;
 use alloc::rc::Rc;
 use cfg_if::cfg_if;
 use core::cell::RefCell;

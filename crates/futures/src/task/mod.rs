@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use core::future::Future;
 use core::pin::Pin;
 
@@ -14,7 +15,7 @@ pub(crate) trait Task {
 
 pub(crate) fn spawn(future: Pin<Box<dyn Future<Output = ()> + 'static>>) {
     #[cfg(target_feature = "atomics")]
-    match threads_avilable() {
+    match threads_available() {
         false => singlethread::Task::spawn(future),
         true => multithread::Task::spawn(future),
     }
@@ -25,7 +26,7 @@ pub(crate) fn spawn(future: Pin<Box<dyn Future<Output = ()> + 'static>>) {
 
 /// Whether threads are available in the current environment.
 #[cfg(target_feature = "atomics")]
-fn threads_avilable() -> bool {
+fn threads_available() -> bool {
     use core::sync::atomic::{AtomicU8, Ordering};
     use wasm_bindgen::JsValue;
 

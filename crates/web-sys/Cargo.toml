@@ -32,7 +32,10 @@ wasm-bindgen-futures = { path = '../futures', features = ["futures-core-03-strea
 wasm-bindgen-test = { path = '../test' }
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(web_sys_unstable_apis)', 'cfg(wasm_bindgen_unstable_test_coverage)'] }
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(web_sys_unstable_apis)',
+  'cfg(wasm_bindgen_unstable_test_coverage)',
+] }
 
 [lints.clippy]
 large_enum_variant = "allow"
