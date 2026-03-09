@@ -1111,9 +1111,23 @@ export const __wbg_memory: WebAssembly.Memory;
                     await __wwrr.default({{module_or_path: wwrr_module_or_path}});
                     __wwrr.initializeLogger(__runtimeLogConfig);
                     const moduleResponse = await fetch(module_or_path);
-                    const moduleData = new Uint8Array(await moduleResponse.arrayBuffer());
+                    let compiledModule;
+                    let moduleData;
+                    if (typeof WebAssembly.compileStreaming === 'function') {{
+                        try {{
+                            const clonedResponse = moduleResponse.clone();
+                            compiledModule = await WebAssembly.compileStreaming(moduleResponse);
+                            moduleData = new Uint8Array(await clonedResponse.arrayBuffer());
+                        }} catch (e) {{
+                            // compileStreaming can fail if MIME type is not application/wasm.
+                        }}
+                    }}
+                    if (compiledModule === undefined) {{
+                        moduleData = new Uint8Array(await moduleResponse.arrayBuffer());
+                        compiledModule = await WebAssembly.compile(moduleData);
+                    }}
                     const imports = __wbg_get_imports();
-                    instance = await __wwrr.loadWasix(moduleData, config, imports);
+                    instance = await __wwrr.loadWasix(compiledModule, moduleData, config, imports);
                     __wbg_set_exports(instance.exports);
                     wasm.{INIT_EXTERNREF_TABLE_NAME}();
                     wasm.{WAIT_PROHIBITED_GLOBAL}.value = __wbg_wait_prohibited() ? 1 : 0;
