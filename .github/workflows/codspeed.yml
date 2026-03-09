@@ -20,6 +20,7 @@ permissions:
 
 jobs:
   benchmarks:
+    if: false # Disabled: CodSpeed not configured for this fork
     name: Run benchmarks
     runs-on: codspeed-macro
     steps:
