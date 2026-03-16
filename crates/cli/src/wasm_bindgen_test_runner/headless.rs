@@ -150,19 +150,7 @@ pub fn run(
     let style_mode = style_mode_for_browser(&browser_name);
 
     // Visit our local server to open up the page that runs tests.
-    //
-    // If WASM_BINDGEN_TEST_ADDRESS is set, use it as the local server URL,
-    // trying to inherit the port from the server if it isn't specified.
-    let mut url = match std::env::var("WASM_BINDGEN_TEST_ADDRESS") {
-        Ok(u) => {
-            let mut url = Url::parse(&u)?;
-            if url.port().is_none() {
-                url.set_port(Some(server.port())).unwrap();
-            }
-            url
-        }
-        Err(_) => Url::parse(&format!("http://{server}"))?,
-    };
+    let mut url = Url::parse(&format!("http://{server}"))?;
     // The headless template reads this fragment to pick the style.
     let style = match style_mode {
         StyleMode::DisplayNone => "display-none",
